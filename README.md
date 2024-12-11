@@ -1,0 +1,1 @@
+# plugins-booking-and-rental-manager-for-woocommerce
