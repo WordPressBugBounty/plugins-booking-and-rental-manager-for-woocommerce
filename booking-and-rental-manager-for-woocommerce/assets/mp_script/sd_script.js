@@ -6,8 +6,6 @@
 
         datepicker_inline();
 
-
-
         jQuery('body').on('focusin', '.pickup_date_timely', function(e) {
             jQuery(this).datepicker({
                 dateFormat: js_date_format,
@@ -34,12 +32,13 @@
 
             let post_id = jQuery('.rbfw_post_id').val();
             let manage_inventory_as_timely = $('#manage_inventory_as_timely').val();
+            let rbfw_rent_type = $('#rbfw_rent_type').val();
             let enable_specific_duration = $('#enable_specific_duration').val();
             let time_slot_switch = jQuery('#rbfw_time_slot_switch').val();
             let start_date = jQuery('#rbfw_bikecarsd_selected_date').val();
             let is_muffin_template = jQuery('.rbfw_muffin_template').length;
 
-            if(manage_inventory_as_timely=='on'){
+            if(manage_inventory_as_timely=='on' && rbfw_rent_type=='bike_car_sd'){
                 if(time_slot_switch=='off'){
                     rbfw_service_type_timely_stock_ajax(post_id,start_date,'',enable_specific_duration);
                 }
@@ -59,6 +58,7 @@
                         'selected_date': start_date,
                         'is_muffin_template': is_muffin_template,
                         'time_slot_switch': time_slot_switch,
+                        'nonce' : rbfw_ajax.nonce
                     },
                     beforeSend: function() {
                         jQuery('.rbfw-bikecarsd-result').empty();
@@ -191,6 +191,7 @@
                     'd_type': d_type,
                     'available_quantity': available_quantity,
                     'service_type': service_type,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 beforeSend: function() {
                     jQuery('.rbfw_bikecarsd_price_summary').addClass('old');
@@ -346,6 +347,7 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
             'rbfw_bikecarsd_selected_date': start_date,
             'pickup_time': start_time,
             'enable_specific_duration': enable_specific_duration,
+            'nonce' : rbfw_ajax.nonce
         },
         beforeSend: function() {
             jQuery('.rbfw_bikecarsd_price_summary').addClass('old');
@@ -377,6 +379,7 @@ function rbfw_timely_price_calculation(){
             'post_id': post_id,
             'es_service_price': es_service_price,
             'duration_price': duration_price,
+            'nonce' : rbfw_ajax.nonce
         },
         beforeSend: function() {
             jQuery('.rbfw_bikecarsd_price_summary').addClass('old');

@@ -11,37 +11,36 @@
 				return self::data_sanitize( $data );
 			}
 
-			public static function data_sanitize( $data ) {
-				$data = maybe_unserialize( $data );
-				if ( is_string( $data ) ) {
-					$data = maybe_unserialize( $data );
-					if ( is_array( $data ) ) {
-						$data = self::data_sanitize( $data );
+			public static function data_sanitize( $array ) {
+				if ( ! is_array( $array ) ) {
+					return sanitize_text_field( $array );
+				}
+
+				foreach ( $array as $key => $value ) {
+					if ( is_array( $value ) ) {
+						$array[ $key ] = self::data_sanitize( $value );
 					} else {
-						$data = sanitize_text_field( $data );
-					}
-				} elseif ( is_array( $data ) ) {
-					foreach ( $data as &$value ) {
-						if ( is_array( $value ) ) {
-							$value = self::data_sanitize( $value );
+						if ( filter_var( $value, FILTER_VALIDATE_EMAIL ) ) {
+							$array[ $key ] = sanitize_email( $value );
+						} elseif ( filter_var( $value, FILTER_VALIDATE_URL ) ) {
+							$array[ $key ] = esc_url_raw( $value );
 						} else {
-							$value = sanitize_text_field( $value );
+							$array[ $key ] = sanitize_text_field( $value );
 						}
 					}
 				}
 
-				return $data;
+				return $array;
 			}
 
-			public static function submit_sanitize( $key, $default = '' ) {
-				$data = $_POST[ $key ] ?? $default;
-				$data = stripslashes( strip_tags( $data ) );
-
-				return self::data_sanitize( $data );
-			}
 
 			public static function get_submit_info( $key, $default = '' ) {
-				$data = $_POST[ $key ] ?? $default;
+
+                if (!(isset($_POST['nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'rbfw_ajax_action'))) {
+                    return;
+                }
+
+                $data = isset($_POST[ $key ])?sanitize_text_field(wp_unslash($_POST[ $key ])): $default;
 
 				return self::data_sanitize( $data );
 			}
@@ -141,7 +140,7 @@
 
 			public static function translation_settings( $key, $default = '' ) {
 				$options = get_option( 'rbfw_basic_translation_settings' );
-				echo mep_esc_html( self::settings( $options, $key, $default ) );
+				echo esc_html( self::settings( $options, $key, $default ) );
 			}
 
 			//***************************//

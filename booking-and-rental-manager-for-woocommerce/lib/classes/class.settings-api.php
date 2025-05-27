@@ -104,7 +104,7 @@ class RBFW_Setting_API {
             if ( isset($section['desc']) && !empty($section['desc']) ) {
                 $section['desc'] = '<div class="inside">' . $section['desc'] . '</div>';
                 $callback = function() use ( $section ) {
-		    echo str_replace( '"', '\"', esc_html($section['desc']) );
+		    echo esc_html(str_replace( '"', '\"', $section['desc']) );
 		};
             } else if ( isset( $section['callback'] ) ) {
                 $callback = $section['callback'];
@@ -185,7 +185,7 @@ class RBFW_Setting_API {
         $html        = sprintf( '<input type="%1$s" class="%2$s-text" id="%3$s[%4$s]" name="%3$s[%4$s]" value="%5$s" placeholder="%6$s" maxlength="%7$s" size="%8$s"/>', $type, $size, $args['section'], $args['id'], $value, $placeholder, $maxlength, $size_length );
         $html       .= $this->get_field_description( $args );
 
-        echo $html;
+        echo wp_kses($html,rbfw_allowed_html());
     }
 
     /**
@@ -214,7 +214,7 @@ class RBFW_Setting_API {
         $html        = sprintf( '<input type="%1$s" class="%2$s-number" id="%3$s[%4$s]" name="%3$s[%4$s]" value="%5$s"%6$s%7$s%8$s%9$s/>', $type, $size, $args['section'], $args['id'], $value, $placeholder, $min, $max, $step );
         $html       .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo wp_kses($html,rbfw_allowed_html());
     }
 
     /**
@@ -233,7 +233,7 @@ class RBFW_Setting_API {
         $html  .= sprintf( '%1$s</label>', $args['desc'] );
         $html  .= '</fieldset>';
 
-        echo mep_esc_html($html);
+        echo wp_kses($html,rbfw_allowed_html());
     }
 
         /**
@@ -244,7 +244,7 @@ class RBFW_Setting_API {
     function callback_heading( $args ) {
 
         $html  = '';
-        echo $html;
+        echo wp_kses($html, rbfw_allowed_html());
     }
 
     /**
@@ -255,7 +255,7 @@ class RBFW_Setting_API {
     function callback_notice( $args ) {
 
         $html  = $args['desc'];
-        echo $html;
+        echo wp_kses_post($html);
     }
 
     /**
@@ -269,40 +269,44 @@ class RBFW_Setting_API {
 		$id			= isset( $args['id'] ) ? $args['id'] : "";
 		$value = esc_attr( $this->get_option_trans( $args['id'], $args['section'], $args['std'] ) );
 		$media_url	= wp_get_attachment_url( $value );
-		$media_type	= get_post_mime_type( $value );
-		$media_title= get_the_title( $value );
-		wp_enqueue_media();
+		$media_type = get_post_mime_type($value);
+        $media_title = get_the_title($value);
+        wp_enqueue_media();
 
-		echo "<div class='media_preview'>";
+        echo "<div class='media_preview'>";
 
-		if( "audio/mpeg" == $media_type ){
-			esc_html_e('Audio/Video format not supported.','rbfw-pro');
-		}
-		else {
-			echo "<img id='media_preview_$id' src='$media_url'/>";
-		}
+        if ("audio/mpeg" == $media_type) {
+            esc_html_e('Audio/Video format not supported.', 'booking-and-rental-manager-for-woocommerce');
+        } else {
+            echo "<img id='media_preview_" . esc_attr($id) . "' src='" . esc_url($media_url) . "' />";
+        }
+
+        echo "</div>";
 
 		echo "</div>";
-        echo sprintf( '<input type="hidden" id="media_input_%1$s" name="%2$s[%1$s]" value="%3$s"/>', $id, $args['section'], $value);
-		echo "<div class='rbfw_green_btn' id='media_upload_$id' style='margin-right:5px'>".__('Upload','rbfw-pro')."</div>";
-		echo "<div class='rbfw_red_btn' id='media_remove_$id'>".__('Remove','rbfw-pro')."</div>";
+        echo wp_kses_post( '<input type="hidden" id="media_input_'.$id.'" name="'.$args['section'].'['.$id.']" value="'.$value.'"/>');
+		echo  wp_kses_post("<div class='rbfw_green_btn' id='media_upload_$id' style='margin-right:5px'>".__('Upload','booking-and-rental-manager-for-woocommerce')."</div>");
+		echo  wp_kses_post("<div class='rbfw_red_btn' id='media_remove_$id'>".__('Remove','booking-and-rental-manager-for-woocommerce')."</div>");
 
-		echo "<script>jQuery(document).ready(function($){
-		jQuery('#media_upload_$id').click(function() {
-			var send_attachment_bkp = wp.media.editor.send.attachment;
-			wp.media.editor.send.attachment = function(props, attachment) {
-				jQuery('#media_preview_$id').attr('src', attachment.url);
-				jQuery('#media_input_$id').val(attachment.id);
-				wp.media.editor.send.attachment = send_attachment_bkp;
-			}
-			wp.media.editor.open(jQuery(this));
-			return false;
-		});
-        jQuery('#media_remove_$id').click(function() {
-            jQuery('#media_preview_$id').attr('src','');
-            jQuery('#media_input_$id').val('');
-        });
-		});	</script>";
+		echo '<script>' . esc_js('
+            jQuery(document).ready(function($) {
+                jQuery("#media_upload_' . esc_attr($id) . '").click(function() {
+                    var send_attachment_bkp = wp.media.editor.send.attachment;
+                    wp.media.editor.send.attachment = function(props, attachment) {
+                        jQuery("#media_preview_' . esc_attr($id) . '").attr("src", attachment.url);
+                        jQuery("#media_input_' . esc_attr($id) . '").val(attachment.id);
+                        wp.media.editor.send.attachment = send_attachment_bkp;
+                    };
+                    wp.media.editor.open(jQuery(this));
+                    return false;
+                });
+
+                jQuery("#media_remove_' . esc_attr($id) . '").click(function() {
+                    jQuery("#media_preview_' . esc_attr($id) . '").attr("src", "");
+                    jQuery("#media_input_' . esc_attr($id) . '").val("");
+                });
+            });
+        ') . '</script>';
 	}
 
     function callback_multicheck( $args ) {
@@ -320,7 +324,7 @@ class RBFW_Setting_API {
         $html .= $this->get_field_description( $args );
         $html .= '</fieldset>';
 
-        echo mep_esc_html($html);
+        echo wp_kses($html,rbfw_allowed_html());
     }
 
     /**
@@ -342,7 +346,7 @@ class RBFW_Setting_API {
         $html .= $this->get_field_description( $args );
         $html .= '</fieldset>';
 
-        echo mep_esc_html($html);
+        echo wp_kses($html , rbfw_allowed_html());
     }
 
     /**
@@ -364,7 +368,7 @@ class RBFW_Setting_API {
         $html .= sprintf( '</select>' );
         $html .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo  wp_kses($html , rbfw_allowed_html());
     }
 
     function callback_generatepage( $args ) {
@@ -381,7 +385,7 @@ class RBFW_Setting_API {
         $html .= sprintf( '</select>' );
         $html .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo wp_kses($html , rbfw_allowed_html());
     }
 
     /**
@@ -398,7 +402,7 @@ class RBFW_Setting_API {
         $html        = sprintf( '<textarea rows="5" cols="55" class="%1$s-text" id="%2$s[%3$s]" name="%2$s[%3$s]"%4$s>%5$s</textarea>', $size, $args['section'], $args['id'], $placeholder, $value );
         $html        .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo wp_kses($html , rbfw_allowed_html());
     }
 
     /**
@@ -408,7 +412,7 @@ class RBFW_Setting_API {
      * @return string
      */
     function callback_html( $args ) {
-        echo mep_esc_html($this->get_field_description( $args ));
+        echo wp_kses($this->get_field_description( $args ),rbfw_allowed_html());
     }
 
     /**
@@ -421,7 +425,7 @@ class RBFW_Setting_API {
         $value = $this->get_option_trans( $args['id'], $args['section'], $args['std'] );
         $size  = isset( $args['size'] ) && !is_null( $args['size'] ) ? $args['size'] : '500px';
 
-        echo '<div style="max-width: ' . mep_esc_html($size) . ';">';
+        echo '<div style="max-width: ' . esc_html($size) . ';">';
 
         $editor_settings = array(
             'teeny'         => true,
@@ -450,13 +454,13 @@ class RBFW_Setting_API {
         $value = esc_attr( $this->get_option_trans( $args['id'], $args['section'], $args['std'] ) );
         $size  = isset( $args['size'] ) && !is_null( $args['size'] ) ? $args['size'] : 'regular';
         $id    = $args['section']  . '[' . $args['id'] . ']';
-        $label = isset( $args['options']['button_label'] ) ? $args['options']['button_label'] : __( 'Choose File' );
+        $label = isset( $args['options']['button_label'] ) ? $args['options']['button_label'] : __( 'Choose File','booking-and-rental-manager-for-woocommerce' );
 
         $html  = sprintf( '<input type="text" class="%1$s-text wpsa-url" id="%2$s[%3$s]" name="%2$s[%3$s]" value="%4$s"/>', $size, $args['section'], $args['id'], $value );
         $html  .= '<input type="button" class="button wpsa-browse" value="' . $label . '" />';
         $html  .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo wp_kses($html , rbfw_allowed_html());
     }
 
     /**
@@ -472,7 +476,7 @@ class RBFW_Setting_API {
         $html  = sprintf( '<input type="password" class="%1$s-text" id="%2$s[%3$s]" name="%2$s[%3$s]" value="%4$s"/>', $size, $args['section'], $args['id'], $value );
         $html  .= $this->get_field_description( $args );
 
-        echo mep_esc_html($html);
+        echo wp_kses($html , rbfw_allowed_html());
     }
 
     /**
@@ -491,7 +495,7 @@ class RBFW_Setting_API {
         $html  = '<input type="text" class="'.$size.'-text wp-color-picker-field abc" id="'.$args['section'].'['.$args['id'].']" name="'.$args['section'].'['.$args['id'].']" value="'.$value.'" data-default-color="'.$value.'" />';
         $html  .= $this->get_field_description( $args );
 
-        echo $html;
+        echo  wp_kses($html,rbfw_allowed_html());
 
     }
 
@@ -509,8 +513,8 @@ class RBFW_Setting_API {
             'id'       => $args['section'] . '[' . $args['id'] . ']',
             'echo'     => 0
         );
-        $html = wp_dropdown_pages( $dropdown_args );
-        echo mep_esc_html($html);
+        echo wp_kses_post(wp_dropdown_pages( $dropdown_args ));
+        // echo  wp_kses_post($html);
     }
 
     /**
@@ -600,7 +604,7 @@ class RBFW_Setting_API {
         }
         $html .= '</div>';
 
-        echo mep_esc_html($html);
+        echo wp_kses($html,rbfw_allowed_html());
     }
 
     /**

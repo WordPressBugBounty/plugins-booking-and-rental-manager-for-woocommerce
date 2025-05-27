@@ -37,6 +37,8 @@ $frontend = 'yes';
 $submit_name = 'add-to-cart';
 
 
+
+
 /*$rbfw_inventory = get_post_meta($post_id,'rbfw_inventory',true);
 echo '<pre>';
 print_r($rbfw_inventory);
@@ -46,13 +48,13 @@ exit;*/
 
 do_action('rbfw_single_page_before_wrapper');
 if ( post_password_required() ) {
-    echo get_the_password_form(); // WPCS: XSS ok.
+    echo wp_kses(get_the_password_form(),rbfw_allowed_html()); // WPCS: XSS ok.
 } else {
     do_action( 'woocommerce_before_single_product' );
     //include_once( RBFW_Function::get_template($post_id) );
     $today_booking_enable = rbfw_get_option('today_booking_enable','rbfw_basic_gen_settings');
     ?>
-    <input type="hidden" class="rbfw_today_booking_enable" value="<?php echo $today_booking_enable ?>">
+    <input type="hidden" class="rbfw_today_booking_enable" value="<?php echo esc_attr($today_booking_enable); ?>">
     <?php
     RBFW_Frontend::load_template($post_id);
 

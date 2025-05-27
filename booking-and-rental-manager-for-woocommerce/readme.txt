@@ -1,9 +1,9 @@
-=== Rental and Booking Manager for Bike, Car, Dress, Resort with WooCommerce Integration - WpRently | WordPress plugin ===
+=== Booking and Rental Manager for Bike | Car | Resort | Appointment | Dress | Equipment ===
 Contributors: magepeopleteam, aamahin, raselsha, rabiul042
 Plugin link: https://mage-people.com/
 Tags: booking calendar, Woocommerce Reservation Booking, Rental Booking, Woocommerce Rental Booking, Rental Plugin 
 Requires at least: 5.3
-Stable tag: trunk
+Stable tag: 2.2.2
 Tested up to: 6.7.1
 Requires PHP: 7.0
 License: GPLv2 or later
@@ -21,6 +21,13 @@ Upgrade your manual rental appointment and equipment booking system with the tou
 Locally and internationally, we don't just build businesses; we guarantee that we solve a significant number of business problems with our customized rental booking WordPress plugin solution. While we mostly focus on bikes, our solution is wider than them. Multiple businesses can benefit from WpRently, including cars, party dresses, parking, equipment, and resort booking. 
 
 WpRently provides you with the necessary features for free to start your rental booking system. However, when you want to take your business to the next level, the pro version of WpRently will help you achieve that position. If you are running a small business, the free version would be okay, but for larger businesses or want to level up, the pro version would suit you best.
+
+###  Explore The Demo:
+
+🌐 [Live Demo](https://wprently.com/)
+📘 [Online Documentation](https://www.wprently.com/docs/)
+🛍️ [Buy Booking and Rental Pro](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
+
 
 
 ## Our plugin supports a variety of applications, including:
@@ -97,10 +104,10 @@ Let's dive deeper into the features list to ensure your system is optimized for 
 ➡  [View All PRO Version Demo](https://www.wprently.com/bike/)
 ➡  [Bike/Car Rent Service for Single Day PRO Version Demo](https://www.wprently.com/bike/)
 ➡  [Bike/Car Rent for Multiple Day PRO Version Demo](https://www.wprently.com/car/)
-➡  [Doctor Appointment PRO Version Demo](https://booking.mage-people.com/rent/doctor-appointment/)
-➡  [Dress Rent System PRO Version Demo](https://booking.mage-people.com/rent/dress/)
+➡  [Doctor Appointment PRO Version Demo](https://www.wprently.com/rent/doctor-appointment/)
+➡  [Dress Rent System PRO Version Demo](https://www.wprently.com/rent/dress/)
 ➡  [Equipment Rent Service PRO Version Demo](https://www.wprently.com/equipment/)
-➡  [Resort Rent or Resort Booking PRO Version Demo](https://booking.mage-people.com/rent/resort/)
+➡  [Resort Rent or Resort Booking PRO Version Demo](https://www.wprently.com/rent/resort/)
 ➡  [Rental Items List PRO Version Demo](https://www.wprently.com/rents-list-style/)
 ➡  [Rental Items Grid Style List PRO Version Demo](https://www.wprently.com/rents-grid-style/)
 
@@ -196,7 +203,7 @@ It will be compatible with any standards-compliant wordpress theme.
 
 
 ## Privacy Policy
-Rent and Booking Manager For WooCommerce uses [Appsero](https://appsero.com) SDK to collect some telemetry data upon user's confirmation. This helps us to troubleshoot problems faster & make product improvements.
+Rent and Booking Manager For WooCommerce uses [Appsero](https://appsero.com) SDK to collect some telemetry data upon the user's confirmation. This helps us to troubleshoot problems faster & make product improvements.
 
 Appsero SDK **does not gather any data by default.** The SDK only starts gathering basic telemetry data **when a user allows it via the admin notice**. We collect the data to ensure a great user experience for all our users.
 
@@ -206,6 +213,71 @@ Learn more about how [Appsero collects and uses this data](https://appsero.com/p
 
 
 == Changelog ==
+
+= 2.4.0 =
+* Updated pricing info.
+* Add new resort problem solved in resort type.
+* Code updated.
+
+= 2.3.9 =
+* For multi day default stock quantity is 100, if stock null.
+* Console error fixed.
+* Code updated.
+
+= 2.3.8 =
+* Sold out problem option added on calendar.
+* Extra service and totat pricing problem solved in cart page.
+
+
+= 2.3.7 =
+* Add to cart redirection problem solved.
+* Count extra day calculation problem solved in resort.
+
+
+= 2.3.6 =
+* Shipping class select option added.
+* Code updat
+* Shortcode problem solved.
+
+= 2.3.4 =
+* Translation issues solved.
+* Icon adding problem solved.
+
+= 2.3.3 =
+* Warning fixed.
+
+= 2.3.1 =
+* Seassional price implementation on single day option.
+* In Multiday quantity seassional price solve solved.
+* PDF issue solved.
+
+= 2.2.8 =
+* Cart page update.
+* In Multiday quantity visible option solved.
+* Category wise showing fixed.
+
+= 2.2.7 =
+* Quantity off option added in single day.
+* Multi category solved in rent list page.
+
+
+= 2.2.6 =
+* Security discount exclude vat.
+* Shipping enable fixed.
+
+
+= 2.2.5 =
+* Label fixed.
+* Warning removed.
+* Single daye time fixed.
+
+
+= 2.2.2 =
+* Setup wizard updated.
+* Vurnalable issue fixed.
+* Appointmanet problem solved.
+* Multiple cart problem solved.
+* Bug fixed.
 
 = 2.2.1 =
 * Multi date inventory problem solved.

@@ -25,7 +25,7 @@
 
     section{
         padding: 20px;
-        border: 1px solid $color-light;
+        border: 5px solid $color-light;
         margin-top: -1px;
         border-radius: 0;
         display: flex;
@@ -34,7 +34,6 @@
         label{
             margin: 0;
             font-size: 14px;
-            font-family: DejaVuSansBold, sans-serif;
             font-weight: 600;
             line-height: 1.2;
             margin-bottom: 8px;
@@ -217,7 +216,6 @@
         flex-wrap: wrap;
         justify-content:start;
         .gallery-image{
-            width: 16.38em;
             height: 120px;
             margin: 5px;
             position: relative;
@@ -253,7 +251,7 @@
     }
     .rbfw_variations_table{
         .rbfw_variations_table_row{
-            border: 1px solid $color-light;
+            border: 3px solid $color-light;
             margin-bottom: 20px;
             header{
                 display: flex;

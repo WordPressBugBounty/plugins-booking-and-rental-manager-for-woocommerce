@@ -1,272 +1,5 @@
 (function($) {
     "use strict";
-    //=========Remove Setting Item ==============//
-    jQuery(document).on('click', '.rbfw_item_remove:not(.rbfw-faq-content-wrapper-main .rbfw_item_remove)', function() {
-        if (confirm('Are You Sure , Remove this row ? \n\n 1. Ok : To Remove . \n 2. Cancel : To Cancel .')) {
-            jQuery(this).closest('.rbfw_remove_area').slideUp(250, function() {
-                jQuery(this).remove();
-            });
-        } else {
-            return false;
-        }
-    });
-    jQuery(document).on('click', '.rbfw_close_multi_image_item', function() {
-        let parent = jQuery(this).closest('.rbfw_multi_image_area');
-        let current_parent = jQuery(this).closest('.rbfw_multi_image_item');
-        let img_id = current_parent.data('image-id');
-        let grandParent = jQuery(this).parents('.rbfw_faq_item');
-        jQuery('.rbfw_multi_image_item[data-image-id=' + img_id + ']').remove();
-        let all_img_ids = parent.find('.rbfw_multi_image_value').val();
-        all_img_ids = all_img_ids.replace(',' + img_id, '')
-        all_img_ids = all_img_ids.replace(img_id + ',', '')
-        all_img_ids = all_img_ids.replace(img_id, '')
-        parent.find('.rbfw_multi_image_value').val(all_img_ids);
-        if (all_img_ids == '') {
-            grandParent.find('.rbfw_upload_img_notice').show();
-        }
-
-    });
-    jQuery(document).on('click', '.add_multi_image,.rbfw_upload_img_notice', function() {
-        let parent = jQuery(this).closest('.rbfw_multi_image_area');
-        let grandParent = jQuery(this).parents('.rbfw_faq_item');
-        wp.media.editor.send.attachment = function(props, attachment) {
-            let attachment_id = attachment.id;
-            let attachment_url = attachment.url;
-            let html = '<div class="rbfw_multi_image_item" data-image-id="' + attachment_id + '"><span class="rbfw_close_multi_image_item"><i class="fa-solid fa-trash-can"></i></span>';
-            html += '<img src="' + attachment_url + '" alt="' + attachment_id + '"/>';
-            html += '</div>';
-
-
-            if (attachment_id != '') {
-                grandParent.find('.rbfw_upload_img_notice').hide();
-            }
-
-            parent.find('.rbfw_multi_image').append(html);
-            grandParent.find('.rbfw_faq_content_wrapper .rbfw_multi_image').append(html);
-            grandParent.find('.rbfw_faq_content_wrapper .rbfw_multi_image .rbfw_close_multi_image_item').remove();
-            let value = parent.find('.rbfw_multi_image_value').val();
-            value = value ? value + ',' + attachment_id : attachment_id;
-            parent.find('.rbfw_multi_image_value').val(value);
-        }
-        wp.media.editor.open(jQuery(this));
-        return false;
-    });
-    //*********Add F.A.Q Item************//
-    jQuery(document).ready(function() {
-
-        function rbfw_faq_actions_func() {
-            jQuery('.rbfw_faq_item_edit').click(function(e) {
-                e.preventDefault();
-                let dataId = $(this).data('id');
-                let parent = $('.rbfw_faq_item[data-id=' + dataId + ']');
-                let all_img_ids = parent.find('.rbfw_multi_image_value').val();
-                jQuery("body").css("overflow", "hidden");
-                $('.rbfw_faq_slide_actionlinks .faq_notice').remove();
-                $('.interface-interface-skeleton__sidebar .interface-complementary-area__fill').css('width', '0');
-                $('.components-button').removeClass('is-pressed').attr('aria-expanded', 'false');
-                parent.find(".rbfw_faq_slide_wrap").fadeIn();
-                parent.find(".rbfw_faq_slide_overlay").show("slide", { direction: "right" }, 0);
-                if (all_img_ids == '') {
-                    parent.find('.rbfw_upload_img_notice').show();
-                }
-
-            });
-            $('.rbfw_faq_slide_close').click(function(e) {
-                e.preventDefault();
-                let dataId = $(this).parents('.rbfw_faq_item').data('id');
-                let parent = $('.rbfw_faq_item[data-id=' + dataId + ']');
-
-
-                parent.find(".rbfw_faq_slide_overlay").hide("slide", { direction: "right" }, 0);
-                setTimeout(function() {
-                    parent.find(".rbfw_faq_slide_wrap").fadeOut();
-                    jQuery("body").css("overflow", "visible");
-                }, 0);
-
-                if (parent.data('status') != 'saved') {
-                    parent.remove();
-                    return false;
-                }
-            });
-
-            $('.rbfw_save_faq_content_btn').click(function(e) {
-                e.preventDefault();
-                let count = $('.rbfw-faq-content-wrapper-main .rbfw_faq_item').length;
-                let theDataArr = [];
-                let postID = $('#post_ID').val();
-                let getThisParent = jQuery(this).parents('.rbfw_faq_item');
-                let getThisDataID = getThisParent.data('id');
-                let getThisTextID = jQuery('.rbfw_faq_item[data-id=' + getThisDataID + '] textarea[name="rbfw_faq_content[]"]').attr('id');
-
-                tinyMCE.triggerSave();
-                let getThisTitle = getThisParent.find('[name="rbfw_faq_title[]"]').val();
-                let getThisContent = tinymce.get(getThisTextID).getContent();
-
-                if (getThisTitle == '') {
-                    alert('Title is required!');
-                    return false;
-                }
-                let rbfw_faq_title = '';
-                let rbfw_faq_img = '';
-                let getID = '';
-                let rbfw_faq_content = '';
-                for (let i = 1; i <= count; i++) {
-                    rbfw_faq_title = $('.rbfw_faq_item:nth-child(' + i + ') [name="rbfw_faq_title[]"]').val();
-                    rbfw_faq_img = $('.rbfw_faq_item:nth-child(' + i + ') [name="rbfw_faq_img[]"]').val();
-
-                    getID = jQuery('.rbfw_faq_item:nth-child(' + i + ') textarea[name="rbfw_faq_content[]"]').attr('id');
-
-                    rbfw_faq_content = tinymce.get(getID).getContent();
-
-                    theDataArr.push({ rbfw_faq_title: rbfw_faq_title, rbfw_faq_img: rbfw_faq_img, rbfw_faq_content: rbfw_faq_content });
-                }
-
-
-                jQuery.ajax({
-                    type: 'POST',
-                    url: ajaxurl,
-                    data: {
-                        'action': 'rbfw_save_faq_data',
-                        'data': JSON.stringify(theDataArr),
-                        'postID': postID
-                    },
-                    beforeSend: function() {
-                        jQuery('.rbfw_save_faq_content_btn i').show();
-                        $('.rbfw_faq_slide_actionlinks .faq_notice').remove();
-                    },
-                    success: function(response) {
-                        jQuery('.rbfw_save_faq_content_btn i').hide();
-
-                        getThisParent.find('.rbfw_faq_desc').html(getThisContent);
-                        getThisParent.find('.rbfw_faq_header').find('.rbfw_faq_header_title').html(getThisTitle);
-                        getThisParent.find('.rbfw_faq_new_accordion_wrapper').show();
-                        getThisParent.attr('data-status', 'saved');
-                        getThisParent.find('.rbfw_faq_slide_close').trigger('click');
-
-                    },
-                });
-            });
-
-            jQuery('input[name=rbfw_enable_faq_content]').click(function() {
-                var status = jQuery(this).val();
-                if (status == 'yes') {
-                    jQuery(this).val('no');
-                    jQuery('.rbfw-faq-content-wrapper-main,.rbfw_faq_content_btn_wrap').slideUp().removeClass('show').addClass('hide');
-                }
-                if (status == 'no') {
-                    jQuery(this).val('yes');
-                    jQuery('.rbfw-faq-content-wrapper-main,.rbfw_faq_content_btn_wrap').slideDown().removeClass('hide').addClass('show');
-                }
-            });
-
-        }
-        rbfw_faq_actions_func();
-
-        jQuery(document).on('click', '.rbfw_faq_accordion_icon,.rbfw_faq_header_title', function(e) {
-            e.preventDefault();
-            let dataID = jQuery(this).closest('.rbfw_faq_item').data('id');
-            let theParent = jQuery('.rbfw-faq-content-wrapper-main .rbfw_faq_item[data-id=' + dataID + ']');
-
-            if (theParent.hasClass("active")) {
-                theParent.removeClass('active');
-                theParent.find('.rbfw_faq_content_wrapper').hide();
-            } else {
-                theParent.addClass('active');
-                theParent.find('.rbfw_faq_content_wrapper').show();
-            }
-
-            theParent.find('.rbfw_faq_accordion_icon i').toggleClass('fa-plus fa-minus');
-        });
-
-        jQuery(document).on('click', '.rbfw-faq-content-wrapper-main .rbfw_item_remove', function() {
-            if (confirm('Are you sure you want to delete this item? You will not be able to undo this action. \n\n 1. Ok : To Delete . \n 2. Cancel : To Cancel .')) {
-                jQuery(this).closest('.rbfw_remove_area').slideUp(250, function() {
-                    jQuery(this).remove();
-                    let count = $('.rbfw-faq-content-wrapper-main .rbfw_faq_item').length;
-                    let theDataArr = [];
-                    let postID = $('#post_ID').val();
-                    let rbfw_faq_title = '';
-                    let rbfw_faq_img = '';
-                    let getID = '';
-                    let rbfw_faq_content = '';
-
-                    for (let i = 1; i <= count; i++) {
-
-                        if ($('.rbfw_faq_item:nth-child(' + i + ')').length) {
-                            rbfw_faq_title = $('.rbfw_faq_item:nth-child(' + i + ') [name="rbfw_faq_title[]"]').val();
-                            rbfw_faq_img = $('.rbfw_faq_item:nth-child(' + i + ') [name="rbfw_faq_img[]"]').val();
-
-                            getID = jQuery('.rbfw_faq_item:nth-child(' + i + ') textarea[name="rbfw_faq_content[]"]').attr('id');
-
-                            rbfw_faq_content = tinymce.get(getID).getContent();
-
-                            theDataArr.push({ rbfw_faq_title: rbfw_faq_title, rbfw_faq_img: rbfw_faq_img, rbfw_faq_content: rbfw_faq_content });
-
-                        }
-                    }
-
-                    jQuery.ajax({
-                        type: 'POST',
-                        url: ajaxurl,
-                        data: {
-                            'action': 'rbfw_save_faq_data',
-                            'data': JSON.stringify(theDataArr),
-                            'postID': postID
-                        },
-                        beforeSend: function() {
-                            jQuery('button.rbfw_add_faq_content').addClass('rbfw-pointer-not-allowed');
-                        },
-                        success: function(response) {
-                            alert('FAQ item has been removed!');
-                            jQuery('button.rbfw_add_faq_content').removeClass('rbfw-pointer-not-allowed');
-                        },
-                    });
-
-                });
-            } else {
-                return false;
-            }
-        });
-
-        jQuery(document).on('click', '.rbfw_add_faq_content', function() {
-            let theCount = $('.rbfw-faq-content-wrapper-main .rbfw_faq_item').length;
-            let lastDataID = $('.rbfw-faq-content-wrapper-main .rbfw_faq_item:last-child').data('id');
-            if (lastDataID === undefined) {
-                lastDataID = 0;
-            }
-            let i = parseInt(lastDataID) + 1;
-            let theID = 'rbfw_faq_content_' + i;
-            let theLoader = jQuery('.rbfw_add_faq_content i');
-            $('.rbfw_faq_slide_actionlinks .faq_notice').remove();
-
-            $('.interface-interface-skeleton__sidebar .interface-complementary-area__fill').css('width', '0');
-            $('.components-button').removeClass('is-pressed').attr('aria-expanded', 'false');
-            $.ajax({
-                type: 'POST',
-                url: rbfw_ajax_url,
-                data: { "action": "get_rbfw_add_faq_content", "id": theID, 'count': lastDataID },
-                beforeSend: function() {
-
-                    theLoader.css('display', 'inline-block');
-                },
-                success: function(data) {
-                    $('.rbfw-faq-content-wrapper-main').append(data);
-                    let getID = jQuery('.rbfw_faq_item[data-id=' + i + '] textarea[name="rbfw_faq_content[]"]').attr('id');
-
-                    tinymce.init({ selector: '#' + getID });
-                    rbfw_faq_actions_func();
-                    theLoader.hide();
-                    $('.rbfw_faq_item_edit[data-id=' + i + ']').trigger('click');
-                },
-                error: function(response) {
-                    console.log(response);
-                }
-            });
-
-            return false;
-        });
-    });
-    //*********End F.A.Q Item************//
     jQuery(window).load(function() {
         jQuery('.mp_tab_menu').each(function() {
             jQuery(this).find('ul li:first-child').trigger('click');
@@ -400,19 +133,6 @@
             return false;
         });
 
-        jQuery('.rbfw_switch_faq label').on('click', function() {
-
-            var item_type = jQuery(this).find('input').val();
-
-            if (item_type == 'yes') {
-                jQuery('.rbfw_faq_content_wrapper').show();
-            } else {
-                jQuery('.rbfw_faq_content_wrapper').hide();
-            }
-
-            return false;
-        });
-
         jQuery('.rbfw_switch_daywise_price label').on('click', function() {
 
             var item_type = jQuery(this).find('input').val();
@@ -452,24 +172,7 @@
             return false;
         });
 
-        jQuery('.rbfw_switch_variations label').on('click', function() {
 
-            var item_type = jQuery(this).find('input').val();
-
-            if (item_type == 'yes') {
-                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_variations"]').show();
-                jQuery('.rbfw_variations_table_wrap').show();
-                jQuery('.rbfw_item_stock_quantity_row').hide();
-                jQuery('.rbfw_variation_tab_notice').hide();
-            } else {
-                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_variations"]').hide();
-                jQuery('.rbfw_variations_table_wrap').hide();
-                jQuery('.rbfw_item_stock_quantity_row').show();
-                jQuery('.rbfw_variation_tab_notice').show();
-            }
-
-            return false;
-        });
 
         jQuery('#field-wrapper-rbfw_time_slot_switch label').click(function(e) {
             let this_attr = jQuery(this).attr('for');
@@ -483,8 +186,28 @@
         });
 
         var current_item_type = jQuery('#rbfw_item_type').val();
-        if (current_item_type != 'bike_car_sd' && current_item_type != 'appointment' && current_item_type != 'resort') {
+        if ( current_item_type != 'appointment') {
             jQuery('.rbfw_seasonal_price_config_wrapper').show();
+            if(current_item_type == 'bike_car_sd'){
+
+                jQuery('.sessional_price_single_day').show();
+                jQuery('.sessional_price_multi_day').hide();
+                jQuery('.sessional_price_resort').hide();
+                jQuery('.mds_price_resort').hide();
+
+            }else if(current_item_type == 'resort'){
+                jQuery('.sessional_price_resort').show();
+                jQuery('.mds_price_resort').show();
+                jQuery('.sessional_price_multi_day').hide();
+                jQuery('.sessional_price_single_day').hide();
+            }else{
+
+                jQuery('.sessional_price_multi_day').show();
+                jQuery('.sessional_price_single_day').hide();
+                jQuery('.sessional_price_resort').hide();
+                jQuery('.mds_price_resort').hide();
+
+            }
         } else {
             jQuery('.rbfw_seasonal_price_config_wrapper').hide();
         }
@@ -494,6 +217,15 @@
         } else {
             jQuery('tr[data-row=rbfw_time_slot_switch]').hide();
             jQuery('tr[data-row=rdfw_available_time]').show();
+        }
+
+        var status = $('.rbfw_es_price_config_wrapper').data('status');
+
+        
+        if(status=='no' && current_item_type == 'bike_car_md'){
+            $('.rbfw_es_price_config_wrapper').hide();
+        }else{
+            $('.rbfw_es_price_config_wrapper').show();
         }
 
         jQuery('#rbfw_item_type').on('change', function() {
@@ -507,7 +239,7 @@
                 jQuery('.rbfw_switch_md_type_item_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').show();
                 jQuery('.rbfw_resort_price_config_wrapper').hide();
-                jQuery('.rbfw_seasonal_price_config_wrapper').hide();
+                jQuery('.rbfw_seasonal_price_config_wrapper').show();
                 jQuery('.rbfw_switch_sd_appointment_row').hide();
                 jQuery('.rbfw_bike_car_sd_price_table_action_column,.rbfw_bike_car_sd_price_table_add_new_type_btn_wrap').show();
                 jQuery('.rbfw_es_price_config_wrapper').show();
@@ -518,10 +250,15 @@
                 jQuery('.rbfw_enable_start_end_date_field_row').hide();
                 jQuery('.regular_fixed_date').hide();
                 jQuery('.rbfw_off_days').show();
-                jQuery('.wervice_quantity_input_box').hide();
+                jQuery('.wervice_quantity_input_box').show();
                 jQuery('#add-bike-car-sd-type-row').show();
 
                 jQuery('.manage_inventory_as_timely').show();
+
+                jQuery('.sessional_price_single_day').show();
+                jQuery('.sessional_price_multi_day').hide();
+                jQuery('.sessional_price_resort').hide();
+                jQuery('.mds_price_resort').hide();
 
                 if(jQuery('[name="manage_inventory_as_timely"]').val()=='on'){
                     jQuery('.rbfw_time_inventory').show();
@@ -530,8 +267,6 @@
                     jQuery('.rbfw_time_inventory').hide();
                     jQuery('.rbfw_without_time_inventory').show();
                 }
-
-
             } else if (item_type == 'appointment') {
                 jQuery('.rbfw_bike_car_sd_wrapper').show();
                 jQuery('.rbfw_general_price_config_wrapper').addClass('rbfw-d-none');
@@ -557,19 +292,10 @@
                 jQuery('.regular_fixed_date').hide();
                 jQuery('#add-bike-car-sd-type-row').hide();
 
-               // $('[name="manage_inventory_as_timely"]').prop('checked', false);
-
                 jQuery('.manage_inventory_as_timely').hide();
                 jQuery('.rbfw_time_inventory').hide();
                 jQuery('.rbfw_without_time_inventory').show();
                 jQuery('.rbfw_item_stock_quantity').hide();
-
-
-                //jQuery('[name="manage_inventory_as_timely"]').val('');
-
-                //jQuery('[name="manage_inventory_as_timely"]').trigger('change');
-
-
 
                 let this_table_row_length = jQuery('.rbfw_bike_car_sd_price_table_row').length;
 
@@ -577,9 +303,7 @@
                     if (index > 0) {
                         jQuery('.rbfw_bike_car_sd_price_table_row[data-key="' + index + '"]').remove();
                     }
-
                 }
-
 
             } else if (item_type == 'resort') {
                 jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_location_config"]').hide();
@@ -590,7 +314,6 @@
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').hide();
                 jQuery('.rbfw_bike_car_sd_wrapper').hide();
                 jQuery('.rbfw_general_price_config_wrapper').hide();
-                jQuery('.rbfw_seasonal_price_config_wrapper').hide();
                 jQuery('.rbfw_resort_price_config_wrapper').show();
                 jQuery('.rbfw_location_switch').hide();
                 jQuery('.rbfw_switch_sd_appointment_row').hide();
@@ -602,6 +325,12 @@
                 jQuery('.rbfw_enable_start_end_date_switch_row').hide();
                 jQuery('.rbfw_enable_start_end_date_field_row').hide();
                 jQuery('.rbfw_off_days').show();
+
+                jQuery('.sessional_price_resort').show();
+                jQuery('.mds_price_resort').show();
+                jQuery('.sessional_price_multi_day').hide();
+                jQuery('.sessional_price_single_day').hide();
+
             } else {
                 jQuery('.rbfw_bike_car_sd_wrapper').hide();
                 jQuery('.rbfw_resort_price_config_wrapper').hide();
@@ -627,6 +356,19 @@
                 jQuery('.rbfw_off_days').show();
                 jQuery('.wervice_quantity_input_box').show();
 
+                jQuery('.sessional_price_multi_day').show();
+                jQuery('.sessional_price_single_day').hide();
+
+                var status = $('.rbfw_es_price_config_wrapper').data('status');
+                if(status=='yes'){
+                    $('.rbfw_es_price_config_wrapper').show();
+                }else{
+                    $('.rbfw_es_price_config_wrapper').hide();
+                }
+                jQuery('.sessional_price_multi_day').show();
+                jQuery('.sessional_price_single_day').hide();
+                jQuery('.sessional_price_resort').hide();
+                jQuery('.mds_price_resort').hide();
 
             }
 
@@ -677,16 +419,8 @@
         jQuery('.rbfw_payment_system').on('change', function() {
             let this_value = jQuery(this).val();
             let this_parent = jQuery(this).parents('tr');
-
-            if (this_value == 'mps') {
-                jQuery(this_parent).siblings('tr').show();
-                jQuery(this_parent).siblings('tr.rbfw_wps_add_to_cart_redirect').hide();
-
-            } else if (this_value == 'wps') {
-                jQuery(this_parent).siblings('tr').hide();
-                jQuery(this_parent).siblings('tr.rbfw_wps_add_to_cart_redirect').show();
-
-            }
+            jQuery(this_parent).siblings('tr').hide();
+            jQuery(this_parent).siblings('tr.rbfw_wps_add_to_cart_redirect').show();
         });
 
 
@@ -789,7 +523,6 @@
             if (event_start_date == '') {
                 alert('Please select the event start date!');
             }
-
         });
 
         jQuery('#rbfw_event_end_date').datepicker({
@@ -874,6 +607,7 @@
                     'selected_date' : selected_date,
                     'start_date' : start_date,
                     'end_date' : end_date,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 beforeSend: function() {
                     jQuery('.rbfw_inventory_page_table_wrap').empty();
@@ -901,6 +635,7 @@
                 data: {
                     'action' : 'rbfw_get_stock_by_filter',
                     'selected_date' : selected_date,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 beforeSend: function() {
                     jQuery('.rbfw_inventory_page_table_wrap').empty();
@@ -938,6 +673,7 @@
                     'data_request' : data_request,
                     'data_date' : data_date,
                     'data_id' : data_id,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 beforeSend: function() {
                     jQuery('#rbfw_stock_view_result_inner_wrap').empty();
@@ -948,11 +684,416 @@
                 }
             });
         });
-
         /* end inventory filter and view details */
-
     });
+    
+    // =====================sidebar modal open close=============
+	$(document).on('click', '[data-modal]', function (e) {
+		const modalTarget = $(this).data('modal');
+		$(`[data-modal-target="${modalTarget}"]`).addClass('open');
+	});
+
+	$(document).on('click', '[data-modal-target] .rbfw-modal-close', function (e) {
+		$(this).closest('[data-modal-target]').removeClass('open');
+	});
+	
+// ================ F.A.Q. ===================================
+	$(document).on('click', '.rbfw-faq-item-new', function (e) {
+		$('#rbfw-faq-msg').html('');
+		$('.rbfw_faq_save_buttons').show();
+		$('.rbfw_faq_update_buttons').hide();
+		empty_faq_form();
+	});
+
+	function close_sidebar_modal(e){
+		e.preventDefault();
+		e.stopPropagation();
+		$('.rbfw-modal-container').removeClass('open');
+	}
+
+	$(document).on('click', '.rbfw-faq-item-edit', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		$('#rbfw-faq-msg').html('');
+		$('.rbfw_faq_save_buttons').hide();
+		$('.rbfw_faq_update_buttons').show();
+		var itemId = $(this).closest('.rbfw-faq-item').data('id');
+		var parent = $(this).closest('.rbfw-faq-item');
+		var headerText = parent.find('.faq-header p').text().trim();
+		var faqContentId = parent.find('.faq-content').html().trim();
+		var editorId = 'rbfw_faq_content';
+		$('input[name="rbfw_faq_title"]').val(headerText);
+		$('input[name="rbfw_faq_item_id"]').val(itemId);
+		if (tinymce.get(editorId)) {
+			tinymce.get(editorId).setContent(faqContentId);
+		} else {
+			$('#' + editorId).val(faqContentId);
+		}
+	});
+
+	$(document).on('click', '.rbfw-faq-item-delete', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var itemId = $(this).closest('.rbfw-faq-item').data('id');
+
+		var isConfirmed = confirm('Are you sure you want to delete this row?');
+		if (isConfirmed) {
+			delete_faq_item(itemId);
+		} else {
+			console.log('Deletion canceled.'+itemId);
+		}
+	});
+	
+
+	function empty_faq_form(){
+		$('input[name="rbfw_faq_title"]').val('');
+		tinyMCE.get('rbfw_faq_content').setContent('');
+		$('input[name="rbfw_faq_item_id"]').val('');
+	}
+	
+
+	$(document).on('click', '#rbfw_faq_update', function (e) {
+		e.preventDefault();
+		update_faq();
+	});
+
+	$(document).on('click', '#rbfw_faq_save', function (e) {
+		e.preventDefault();
+		save_faq();
+	});
+
+	$(document).on('click', '#rbfw_faq_save_close', function (e) {
+		e.preventDefault();
+		save_faq();
+		close_sidebar_modal(e);
+	});
+
+	function update_faq(){
+		var title   = $('input[name="rbfw_faq_title"]');
+		var content = tinyMCE.get('rbfw_faq_content').getContent();
+		var postID  = $('input[name="rbfw_post_id"]');
+		var itemId = $('input[name="rbfw_faq_item_id"]');
+		$.ajax({
+			url: rbfw_ajax_url,
+			type: 'POST',
+			data: {
+				action: 'rbfw_faq_data_update',
+				rbfw_faq_title:title.val(),
+				rbfw_faq_content:content,
+				rbfw_faq_postID:postID.val(),
+				rbfw_faq_itemID:itemId.val(),
+                'nonce' : rbfw_ajax.nonce
+			},
+			success: function(response) {
+				$('#rbfw-faq-msg').html(response.data.message);
+				$('.rbfw-faq-items').html('');
+				$('.rbfw-faq-items').append(response.data.html);
+				setTimeout(function(){
+					$('.rbfw-modal-container').removeClass('open');
+					empty_faq_form();
+				},1000);
+				
+			},
+			error: function(error) {
+				console.log('Error:', error);
+			}
+		});
+	}
+
+	function save_faq(){
+		var title   = $('input[name="rbfw_faq_title"]');
+		var content = tinyMCE.get('rbfw_faq_content').getContent();
+		var postID  = $('input[name="rbfw_post_id"]');
+		$.ajax({
+			url: rbfw_ajax_url,
+			type: 'POST',
+			data: {
+				action: 'rbfw_faq_data_save',
+				rbfw_faq_title:title.val(),
+				rbfw_faq_content:content,
+				rbfw_faq_postID:postID.val(),
+                'nonce' : rbfw_ajax.nonce
+			},
+			success: function(response) {
+				$('#rbfw-faq-msg').html(response.data.message);
+				$('.rbfw-faq-items').html('');
+				$('.rbfw-faq-items').append(response.data.html);
+				empty_faq_form();
+			},
+			error: function(error) {
+				console.log('Error:', error);
+			}
+		});
+	}
+
+	function delete_faq_item(itemId){
+		var postID  = $('input[name="rbfw_post_id"]');
+		$.ajax({
+			url: rbfw_ajax_url,
+			type: 'POST',
+			data: {
+				action: 'rbfw_faq_delete_item',
+				rbfw_faq_postID:postID.val(),
+				itemId:itemId,
+                'nonce' : rbfw_ajax.nonce
+			},
+			success: function(response) {
+				$('.rbfw-faq-items').html('');
+				$('.rbfw-faq-items').append(response.data.html);
+			},
+			error: function(error) {
+				console.log('Error:', error);
+			}
+		});
+	}
+   
+    // ================toggle switch, ===================
+    /**
+     * it should move from internal script to here
+     * then all should in one function
+     */
+     // Toggle visibility for category service price
+    $(document).on('click', 'input[name=rbfw_enable_category_service_price]', function (e) {
+        var status = $(this).val();
+        if (status === 'on') {
+            $(this).val('off')
+            $('#field-wrapper-rbfw_service_category_price').slideUp().removeClass('show').addClass('hide');
+        }
+        if (status === 'off') {
+            $(this).val('on');
+            $('#field-wrapper-rbfw_service_category_price').slideDown().removeClass('hide').addClass('show');
+        }
+    });
+    // Daywise price
+    $(document).on('click', 'input[name=rbfw_enable_daywise_price]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no');
+            $('.day-wise-price-configuration').slideUp().removeClass('show').addClass('hide');
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+            $('.day-wise-price-configuration').slideDown().removeClass('hide').addClass('show');
+        }
+    });
+
+    $(document).on('click', 'input[name=rbfw_enable_extra_service_qty]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no');
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+        }
+    });
+    $(document).on('click', 'input[name=rbfw_available_qty_info_switch]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no');
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+        }
+    });
+    $(document).on('click', 'input[name=shipping_enable]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no')
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+        }
+    });
+    $(document).on('click', 'input[name=rbfw_enable_faq_content]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no')
+            $('.rbfw-faq-section').slideUp();
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+            $('.rbfw-faq-section').slideDown();
+        }
+    });
+
+    $(document).on('click', 'input[name=rbfw_enable_additional_gallary]', function (e) {
+        var status = $(this).val();
+        if (status === 'on') {
+            $(this).val('off');
+            $('.additional-gallary-image').slideUp().removeClass('show').addClass('hide');
+        }
+        if (status === 'off') {
+            $(this).val('on');
+            $('.additional-gallary-image').slideDown().removeClass('hide').addClass('show');
+        }
+    });
+    $(document).on('click', 'input[name=rbfw_dt_sidebar_switch]', function (e) {
+        var status = $(this).val();
+        if (status === 'on') {
+            $(this).val('off')
+        }
+        if (status === 'off') {
+            $(this).val('on');
+        }
+    });
+    // Daily price
+    $(document).on('click', 'input[name=rbfw_enable_daily_rate]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no');
+            $('.rbfw_daily_rate_input input').attr("disabled", true);
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+            $('.rbfw_daily_rate_input input').removeAttr("disabled");
+        }
+    });
+    // Hourly price
+    $(document).on('click', 'input[name=rbfw_enable_hourly_rate]', function (e) {
+        var status = $(this).val();
+        if (status === 'yes') {
+            $(this).val('no');
+            $('.rbfw_hourly_rate input').attr("disabled", true);
+            if ($('input[name=rbfw_time_slot_switch]').val() == 'on') {
+                $('input[name=rbfw_time_slot_switch]').trigger("click");
+            }
+        }
+        if (status === 'no') {
+            $(this).val('yes');
+            $('.rbfw_hourly_rate input').removeAttr("disabled");
+            if ($('input[name=rbfw_time_slot_switch]').val() == 'off') {
+                $('input[name=rbfw_time_slot_switch]').trigger("click");
+            }
+        }
+    });
+    // Day long price
+    $(document).on('click', 'input[name=rbfw_enable_resort_daylong_price]', function (e) {
+        var status = jQuery(this).val();
+        if (status === 'yes') {
+            jQuery(this).val('no');
+            jQuery('.resort_day_long_price').hide();
+        }
+        if (status === 'no') {
+            jQuery(this).val('yes');
+            jQuery('.resort_day_long_price').show();
+        }
+    });
+    // ================toggle switch===================
+
+    // ============== Resort type in price ===================
+    $(document).on('click', '#add-resort-type-row', function (e) {
+        e.preventDefault();
+        let current_time = jQuery.now();
+        if ($('.rbfw_resort_price_table .rbfw_resort_price_table_row').length) {
+            let resort_last_row = $('.rbfw_resort_price_table .rbfw_resort_price_table_row:last-child');
+            let resort_type_last_data_key = parseInt(resort_last_row.attr('data-key'));
+            let resort_type_new_data_key = resort_type_last_data_key + 1;
+            let resort_type_row = '<tr class="rbfw_resort_price_table_row" data-key="' + resort_type_new_data_key + '">'
+                + '<td><input class="rbfw_room_title" type="text" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][room_type]" value="" placeholder="Room type"></td>'
+                + '<td class="text-center"><div class="rbfw_room_type_image_preview"></div><a class="rbfw_room_type_image_btn button"><i class="fas fa-circle-plus"></i></a><a class="rbfw_remove_room_type_image_btn button"><i class="fas fa-circle-minus"></i></a><input type="hidden"  name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_image]" value="" class="rbfw_room_image"></td>'
+                + '<td class="resort_day_long_price"><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_daylong_rate]" step=".01" value="" placeholder="Day-long Rate"></td>'
+                + '<td><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_daynight_rate]" step=".01" value="" placeholder="Day-night Rate"></td>'
+                + '<td><input type="text" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_desc]" value="" placeholder="Short Description"></td>'
+                + '<td><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_available_qty]" value="" placeholder="Available Qty"></td>'
+                + '<td><div class="mp_event_remove_move"><button class="button remove-row ' + current_time + '"><i class="fas fa-trash-can"></i></button><div class="button mp_event_type_sortable_button"><i class="fas fa-arrows-alt"></i></div></div></td>'
+                + '</tr>';
+                $('.rbfw_resort_price_table').append(resort_type_row);
+        } else {
+            let resort_type_new_data_key = 0;
+            let resort_type_row = '<tr class="rbfw_resort_price_table_row" data-key="' + resort_type_new_data_key + '">'
+                + '<td><input type="text" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][room_type]" value="" placeholder="Room type"></td>'
+                + '<td class="text-center"><div class="rbfw_room_type_image_preview"></div><a class="rbfw_room_type_image_btn button"><i class="fas fa-circle-plus"></i></a><a class="rbfw_remove_room_type_image_btn button"><i class="fas fa-circle-minus"></i></a><input type="hidden"  name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_image]" value="" class="rbfw_room_image"></td>'
+                + '<td class="resort_day_long_price"><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_daylong_rate]" step=".01" value="" placeholder="Day-long Rate"></td>'
+                + '<td><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_daynight_rate]" step=".01" value="" placeholder="Day-night Rate"></td>'
+                + '<td><input type="text" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_desc]" value="" placeholder="Short Description"></td>'
+                + '<td><input type="number" class="medium" name="rbfw_resort_room_data[' + resort_type_new_data_key + '][rbfw_room_available_qty]" value="" placeholder="Available Qty"></td>'
+                + '<td><div class="mp_event_remove_move"><button class="button remove-row ' + current_time + '"><i class="fas fa-trash-can"></i></button><div class="button mp_event_type_sortable_button"><i class="fas fa-arrows-alt"></i></div></div></td>'
+                + '</tr>';
+                $('.rbfw_resort_price_table').append(resort_type_row);
+        }
+        $('.remove-row.' + current_time + '').on('click', function () {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (confirm('Are You Sure , Remove this row ? \n\n 1. Ok : To Remove . \n 2. Cancel : To Cancel .')) {
+                $(this).parents('tr').remove();
+            } else {
+                return false;
+            }
+        });
+        $(".rbfw_resort_price_table_body").sortable();
+
+        var daylong_price_label_val = $('input[name="rbfw_enable_resort_daylong_price"]').val();
+
+        if (daylong_price_label_val === 'yes') {
+            $('.resort_day_long_price').show();
+        } else {
+            $('.resort_day_long_price').hide();
+        }
+    });
+
+    // Image handling for room type
+    $(document).on('click', '.rbfw_room_type_image_btn', function (e) {
+        let parent_data_key = $(this).closest('.rbfw_resort_price_table_row').attr('data-key');
+        let send_attachment_bkp = wp.media.editor.send.attachment;
+        wp.media.editor.send.attachment = function (props, attachment) {
+            let image_url = attachment.url;
+            $('.rbfw_resort_price_table_row[data-key=' + parent_data_key + '] .rbfw_room_type_image_preview img').remove();
+            $('.rbfw_resort_price_table_row[data-key=' + parent_data_key + '] .rbfw_room_type_image_preview').append('<img src="' + image_url + '"/>');
+            $('.rbfw_resort_price_table_row[data-key=' + parent_data_key + '] .rbfw_room_image').val(attachment.id);
+            wp.media.editor.send.attachment = send_attachment_bkp;
+        }
+        wp.media.editor.open($(this));
+        return false;
+    });
+
+    $(document).on('click', '.rbfw_remove_room_type_image_btn', function (e) {
+        let parent_data_key =  $(this).closest('.rbfw_resort_price_table_row').attr('data-key');
+        $('.rbfw_resort_price_table_row[data-key=' + parent_data_key + '] .rbfw_room_type_image_preview img').remove();
+        $('.rbfw_resort_price_table_row[data-key=' + parent_data_key + '] .rbfw_room_image').val('');
+    });
+    
+    // ===========resort===========
 }(jQuery));
 
+ // testimonial
+ function createTestimonial() {
+    now = jQuery.now();
+    jQuery(".testimonial-clone").clone().appendTo(".testimonials")
+        .removeClass('testimonial-clone').addClass('testimonial')
+        .children('.testimonial-field').attr('name', 'rbfw_dt_sidebar_testimonials[' + now + '][rbfw_dt_sidebar_testimonial_text]');
+}
+
+// Handle extra service image upload
+jQuery(document).ready(function () {
+    function rbfw_service_image_addup() {
+        // Onclick for extra service add image button
+        jQuery('.rbfw_service_image_btn').click(function () {
+            let target = jQuery(this).parents('tr');
+            let send_attachment_bkp = wp.media.editor.send.attachment;
+            wp.media.editor.send.attachment = function (props, attachment) {
+                target.find('.rbfw_service_image_preview img').remove();
+                // Escape URL before appending it to the DOM
+                target.find('.rbfw_service_image_preview').append('<img src="' + attachment.url + '"/>');
+                target.find('.rbfw_service_image').val(attachment.id); // Escape the attachment ID
+                wp.media.editor.send.attachment = send_attachment_bkp;
+            }
+            wp.media.editor.open(jQuery(this));
+            return false;
+        });
+        // Onclick for extra service remove image button
+        jQuery('.rbfw_remove_service_image_btn').click(function () {
+            let target = jQuery(this).parents('tr');
+            target.find('.rbfw_service_image_preview img').remove();
+            target.find('.rbfw_service_image').val('');
+        });
+    }
+    rbfw_service_image_addup();
+});
+
+
+function getPostIdFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('post'); // returns the post ID as a string
+}
 
 

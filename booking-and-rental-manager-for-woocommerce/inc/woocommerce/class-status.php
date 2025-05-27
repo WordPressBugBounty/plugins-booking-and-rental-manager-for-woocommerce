@@ -21,23 +21,23 @@ if (!class_exists('RBFW_Status')) {
 
         public function rbfw_status_submenu(){
 
-            add_submenu_page('edit.php?post_type=rbfw_item', __('Status', 'booking-and-rental-manager-for-woocommerce'), '<span style="color:#13df13">'.__('Status', 'booking-and-rental-manager-for-woocommerce').'</span>', 'manage_options', 'rbfw-status', array($this, 'rbfw_status_page'));
+            add_submenu_page('edit.php?post_type=rbfw_item', esc_html__('Status', 'booking-and-rental-manager-for-woocommerce'), '<span style="color:#13df13">'.esc_html__('Status', 'booking-and-rental-manager-for-woocommerce').'</span>', 'manage_options', 'rbfw-status', array($this, 'rbfw_status_page'));
         }
 
-        public function rbfw_wc_btn(){
+        public function rbfw_wc_btn() {
             $button_wc = '';
-
+        
             /* WooCommerce */
-            if($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == false) {
-                $button_wc = '<a href="'.esc_url($this->rbfw_wp_plugin_installation_url('woocommerce')).'" class="rbfw_plugin_btn">'.esc_html__('Install','booking-and-rental-manager-for-woocommerce').'</a>';
+            if ($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == false) {
+                $button_wc = '<a href="' . esc_url($this->rbfw_wp_plugin_installation_url('woocommerce')) . '" class="' . esc_attr('rbfw_plugin_btn') . '">' . esc_html__('Install', 'booking-and-rental-manager-for-woocommerce') . '</a>';
             }
-            elseif($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == true && !is_plugin_active( 'woocommerce/woocommerce.php')){
-                $button_wc = '<a href="'.esc_url($this->rbfw_wp_plugin_activation_url('woocommerce/woocommerce.php')).'" class="rbfw_plugin_btn">'.esc_html__('Activate','booking-and-rental-manager-for-woocommerce').'</a>';
+            elseif ($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == true && !is_plugin_active('woocommerce/woocommerce.php')) {
+                $button_wc = '<a href="' . esc_url($this->rbfw_wp_plugin_activation_url('woocommerce/woocommerce.php')) . '" class="' . esc_attr('rbfw_plugin_btn') . '">' . esc_html__('Activate', 'booking-and-rental-manager-for-woocommerce') . '</a>';
             }
-            else{
-                $button_wc = '<span class="rbfw_plugin_status">'.esc_html__('Activated','booking-and-rental-manager-for-woocommerce').'</span>';
+            else {
+                $button_wc = '<span class="rbfw_plugin_status">' . esc_html__('Activated', 'booking-and-rental-manager-for-woocommerce') . '</span>';
             }
-
+        
             return $button_wc;
         }
 
@@ -45,14 +45,14 @@ if (!class_exists('RBFW_Status')) {
             $button_wc = '';
 
             /* WooCommerce */
-            if($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == false) {
-                $button_wc = '<a href="'.esc_url($this->rbfw_wp_plugin_installation_url('woocommerce')).'" class="rbfw_plugin_btn">'.esc_html__('Install','booking-and-rental-manager-for-woocommerce').'</a>';
+            if ($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == false) {
+                $button_wc = '<a href="' . esc_url($this->rbfw_wp_plugin_installation_url('woocommerce')) . '" class="' . esc_attr('rbfw_plugin_btn') . '">' . esc_html__('Install', 'booking-and-rental-manager-for-woocommerce') . '</a>';
             }
-            elseif($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == true && !is_plugin_active( 'woocommerce/woocommerce.php')){
-                $button_wc = '<a href="'.esc_url($this->rbfw_wp_plugin_activation_url('woocommerce/woocommerce.php')).'" class="rbfw_plugin_btn">'.esc_html__('Activate','booking-and-rental-manager-for-woocommerce').'</a>';
+            elseif ($this->rbfw_free_chk_plugin_folder_exist('woocommerce') == true && !is_plugin_active('woocommerce/woocommerce.php')) {
+                $button_wc = '<a href="' . esc_url($this->rbfw_wp_plugin_activation_url('woocommerce/woocommerce.php')) . '" class="' . esc_attr('rbfw_plugin_btn') . '">' . esc_html__('Activate', 'booking-and-rental-manager-for-woocommerce') . '</a>';
             }
-            else{
-                $button_wc = '<span class="rbfw_plugin_status">'.esc_html__('Activated','booking-and-rental-manager-for-woocommerce').'</span>';
+            else {
+                $button_wc = '<span class="rbfw_plugin_status">' . esc_html__('Activated', 'booking-and-rental-manager-for-woocommerce') . '</span>';
             }
             ?>
             <div class="rbfw-status-page-wrapper wrap">
@@ -67,7 +67,7 @@ if (!class_exists('RBFW_Status')) {
                     <tbody>
                         <tr>
                             <td><?php esc_html_e( 'WooCommerce', 'booking-and-rental-manager-for-woocommerce' ); ?></td>
-                            <td><?php echo $button_wc; ?></td>
+                            <td><?php echo wp_kses($button_wc,rbfw_allowed_html()); ?></td>
                         </tr>
                     </tbody>
                 </table>
@@ -136,14 +136,19 @@ if (!class_exists('RBFW_Status')) {
         }
 
         public function rbfw_plugin_activate(){
-            if(isset($_GET['rbfw_plugin_activate']) && !is_plugin_active( $_GET['rbfw_plugin_activate'] )){
-                $slug = $_GET['rbfw_plugin_activate'];
-                $activate = activate_plugin( $slug );
+            if (!(isset($_POST['nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'rbfw_ajax_action'))) {
+                return;
+            }
+	        
+	        if ( isset( $_GET['rbfw_plugin_activate'] ) && !is_plugin_active( sanitize_text_field( wp_unslash( $_GET['rbfw_plugin_activate'] ) ) ) ) {
+		        $slug = sanitize_text_field( wp_unslash( $_GET['rbfw_plugin_activate'] ) );
+		        $activate = activate_plugin( $slug );
                 $url = admin_url( 'edit.php?post_type=rbfw_item&page=rbfw_import' );
-                echo '<script>
-                var url = "'.$url.'";
-                window.location.replace(url);
-                </script>';
+                echo wp_kses_post('<script>
+                    var url = "' . esc_url( $url ) . '";
+                    window.location.replace(url);
+                </script>');
+
             }
             else{
                 return false;
@@ -152,9 +157,13 @@ if (!class_exists('RBFW_Status')) {
 
         public function rbfw_plugin_install(){
 
-            if(isset($_GET['rbfw_plugin_install']) && $this->rbfw_free_chk_plugin_folder_exist($_GET['rbfw_plugin_install']) == false){
-                $slug = $_GET['rbfw_plugin_install'];
-                if($slug == 'woocommerce'){
+            if (!(isset($_POST['nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'rbfw_ajax_action'))) {
+                return;
+            }
+	        
+	        if (isset($_GET['rbfw_plugin_install']) && $this->rbfw_free_chk_plugin_folder_exist(sanitize_text_field(wp_unslash($_GET['rbfw_plugin_install']))) == false) {
+		        $slug = sanitize_text_field(wp_unslash($_GET['rbfw_plugin_install']));
+		        if($slug == 'woocommerce'){
                     $action = 'install-plugin';
                     $url = wp_nonce_url(
                         add_query_arg(
@@ -167,11 +176,12 @@ if (!class_exists('RBFW_Status')) {
                         $action.'_'.$slug
                     );
                     if(isset($url)){
-                        echo '<script>
-                            str = "'.$url.'";
+                        echo wp_kses_post('<script>
+                            var str = "' . esc_js( esc_url( $url ) ) . '";
                             var url = str.replace(/&amp;/g, "&");
                             window.location.replace(url);
-                            </script>';
+                        </script>');
+
                     }
 
 

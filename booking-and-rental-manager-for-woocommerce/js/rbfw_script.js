@@ -31,7 +31,7 @@
         });
 
         //Grid List Auto Height Function
-        rbfw_grid_list_auto_height_func();
+        //rbfw_grid_list_auto_height_func();
 
         function rbfw_grid_list_auto_height_func(extra_height = null) {
             let rbfw_rent_list_height_arr = [];
@@ -171,7 +171,8 @@
             let tomorrow = new Date();
             tomorrow.setDate(today.getDate() + 1); // Add 1 day to get tomorrow
             let todayFormatted = flatpickr.formatDate(today, "d-m-Y");
-            let calendar = flatpickr("#rbfw_rent_item_search_calendar_icon", {
+            let calendar = flatpickr(".rbfw_flatpicker", {
+                disableMobile: "true",
                 dateFormat: "d-m-Y",
                 defaultDate: todayFormatted,
                 minDate: "today",
@@ -179,13 +180,9 @@
                 onChange: function(selectedDates, dateStr, instance) {
                     if (selectedDates.length === 1) {
                         let selectedDate = flatpickr.formatDate(selectedDates[0], "F j, Y");
-                        $("#rbfw_rent_item_search_pickup_date").val(selectedDate);  // Set the input value to the formatted date
+                        $("#rbfw_rent_item_search_pickup_date").val(selectedDate);
                     }
                 }
-            });
-
-            $('#rbfw_rent_item_search_calendar_icon').on('click', function() {
-                calendar.open(); // Trigger the calendar to open
             });
 
             $("#rbfw_rent_item_search_pickup_date").on('focus', function (){
@@ -216,6 +213,41 @@
                 data: {
                     'action' : 'rbfw_get_rent_item_category_info',
                     'post_id': item_number,
+                    'nonce' : rbfw_ajax.nonce
+                },
+                success: function (response) {
+                    $('#rbfw_popup_content').html( response.data );
+                },
+            });
+        });
+
+
+        $('body').on( 'click', '.rbfw_see_resort_datewise_price', function(e){
+            e.preventDefault();
+            let post_id = $(this).data('post_id');
+            let price = $(this).data('price');
+            let total_days = $(this).data('total_days');
+            let checkout_date = $(this).data('checkout_date');
+            let checkin_date = $(this).data('checkin_date');
+            let room_type = $(this).data('room_type');
+            let active_tab = $(this).data('active_tab');
+
+            $("#rbfw_popup_wrapper").show();
+            $("#rbfw_popup_content").html('<div class="rbfw_loader">Loading....</div>')
+
+            jQuery.ajax({
+                type: 'POST',
+                url: rbfw_ajax.rbfw_ajaxurl,
+                data: {
+                    'action' : 'rbfw_get_resort_sessional_day_wise_price',
+                    'post_id': post_id,
+                    'price': price,
+                    'total_days': total_days,
+                    'checkout_date': checkout_date,
+                    'checkin_date': checkin_date,
+                    'room_type': room_type,
+                    'active_tab': active_tab,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 success: function (response) {
                     $('#rbfw_popup_content').html( response.data );
@@ -225,10 +257,10 @@
 
 //Left Filtering
         $('.rbfw_toggle-content').show();
-        $('.rbfw_toggle-header').on('click', function() {
+        $('.rbfw_toggle-icon').on('click', function() {
             var content = $(this).next('.rbfw_toggle-content');
             content.slideToggle();
-            var icon = $(this).find('.rbfw_toggle-icon');
+            var icon = $(this);
             if (icon.text() === '+') {
                 icon.text('−');
             } else {
@@ -236,6 +268,8 @@
             }
         });
         function get_left_filter_data( filter_date ){
+
+            filter_date = JSON.stringify(filter_date);
 
             $("#rbfw_left_filter_clearButton").show();
             $("#rbfw_left_filter_cover").show();
@@ -254,8 +288,9 @@
                 data: {
                     'action' : 'rbfw_get_left_side_filter_data',
                     'filter_date': filter_date,
-                    'rbfw_nomce': rbfw_vars.rbfw_nonce,
+                    'rbfw_nonce': rbfw_vars.rbfw_nonce,
                     'rbfw_item_style': rbfw_item_style,
+                    'nonce' : rbfw_ajax.nonce
                 },
                 success: function (response) {
                     if( response.success ){
@@ -288,7 +323,7 @@
             location: [],
             category: [],
             type: [],
-            price: { start: 0, end: 0 },
+            price: {},
             title_text: '',
         };
         $(document).on('change', '.rbfw_location', function() {
@@ -356,7 +391,7 @@
         });
 
         // Price slider handling
-        if ($('#slider-range').length > 0) {
+        /*if ($('#slider-range').length > 0) {
             var start_val = 0;
             var end_val = 0;
             $("#slider-range").slider({
@@ -381,9 +416,29 @@
             $("#rbfw_left_filter_price").val("" + $("#slider-range").slider("values", 0) + " - " + $("#slider-range").slider("values", 1));
             get_filters.price.start = $("#slider-range").slider("values", 0);
             get_filters.price.end = $("#slider-range").slider("values", 1);
-        }
+        }*/
 
+        $('.rbfw_price_start_end').on('focusout', function () {
 
+            let startPrice = $("#rbfw_price_start").val();
+            let endPrice = $("#rbfw_price_end").val();
+
+            if( startPrice === '' && endPrice === '' ){
+                get_filters.price = {};
+            }else{
+                if( startPrice === '' ){
+                    startPrice =  0;
+                }
+                if( endPrice === '' ){
+                    endPrice =  100000;
+                }
+                get_filters.price.start = parseInt( startPrice );
+                get_filters.price.end = parseInt( endPrice );
+            }
+
+            get_left_filter_data( get_filters );
+
+        });
 
         $(document).on('click', '.rbfw_left_filter_search_btn', function() {
 
@@ -392,7 +447,6 @@
             get_left_filter_data(get_filters);
 
         });
-
 
         $(document).on('click', '.rbfw_left_filter_more_feature_loaders', function(e) {
 
@@ -418,6 +472,7 @@
                         'action': 'rbfw_get_rent_item_left_filter_more_data_popup',
                         'filter_type': filter_type,
                         'rbfw_nonce': rbfw_vars.rbfw_nonce,
+                        'nonce' : rbfw_ajax.nonce
                     },
                     success: function (response) {
                         $('#' + appendId).append(response.data);
@@ -430,19 +485,36 @@
 
         $(document).on('click', '.rbfw_left_filter_clearButton',function() {
             $('.rbfw_location, .rbfw_category, .rbfw_rent_type, .rbfw_rent_feature').prop('checked', false);
-            let clear_get_filters = {
+            get_filters = {
                 location: [],
                 category: [],
                 type: [],
-                price: { start: 0, end: 0 },
+                price: {},
                 title_text: '',
 
             };
-            get_left_filter_data(clear_get_filters);
+            get_left_filter_data( get_filters );
+            $("#rbfw_price_start").val('');
+            $("#rbfw_price_end").val('');
             $("#rbfw_left_filter_clearButton").hide();
         });
 
     });
+
+
+    //========= faq accordion=============
+    $('#rbfw_faq_accordion .rbfw_faq_item .rbfw_faq_header').first().addClass('active');
+    $('#rbfw_faq_accordion .rbfw_faq_item .rbfw_faq_content_wrapper').first().addClass('active');
+    $('#rbfw_faq_accordion .rbfw_faq_item .rbfw_faq_content_wrapper').first().slideDown();
+    $('#rbfw_faq_accordion .rbfw_faq_item .rbfw_faq_header').first().find('i').removeClass('fa-plus').addClass('fa-minus');
+    $('.rbfw_faq_header').click(function (e) {
+        e.preventDefault();
+        $(this).next('.rbfw_faq_content_wrapper').slideToggle();
+        $(this).toggleClass(' active');
+        $(this).next('.rbfw_faq_content_wrapper').toggleClass(' active');
+        $(this).find('i').toggleClass('fa-plus fa-minus');
+    });
+
 })(jQuery)
 
 /* Additional Gallary Images */
@@ -491,6 +563,8 @@ function rbfw_aig_showSlides(n) {
     dots[slideIndex - 1].className += " active";
     captionText.innerHTML = dots[slideIndex - 1].alt;
 }
+
+
 /* End: Additional Gallary Images */
 // using muffin tempalte descriptoin show hide 
 jQuery(document).ready(function($) {
@@ -503,3 +577,5 @@ jQuery(document).ready(function($) {
         
     });
 });
+
+
