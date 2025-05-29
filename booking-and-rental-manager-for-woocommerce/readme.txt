@@ -3,7 +3,7 @@ Contributors: magepeopleteam, aamahin, raselsha, rabiul042
 Plugin link: https://mage-people.com/
 Tags: booking calendar, Woocommerce Reservation Booking, Rental Booking, Woocommerce Rental Booking, Rental Plugin 
 Requires at least: 5.3
-Stable tag: 2.2.2
+Stable tag: 2.4.1
 Tested up to: 6.7.1
 Requires PHP: 7.0
 License: GPLv2 or later
@@ -213,6 +213,11 @@ Learn more about how [Appsero collects and uses this data](https://appsero.com/p
 
 
 == Changelog ==
+
+= 2.4.1 =
+* Dashboard UX & UI Improved
+* Hourly Thresold Option added. 
+* Code updated.
 
 = 2.4.0 =
 * Updated pricing info.
