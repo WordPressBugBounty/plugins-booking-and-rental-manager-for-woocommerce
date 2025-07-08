@@ -26,7 +26,9 @@
 				// wp_enqueue_script( 'mp_plugin_global_rbfw', RBFW_PLUGIN_URL . '/assets/mp_script.js', array(), time(), true );
 				//mp style
 				wp_enqueue_style( 'mp_plugin_global', RBFW_PLUGIN_URL . '/assets/mp_style/mp_style.css', array(), time(), 'all' );
+				wp_enqueue_style( 'rental_lists', RBFW_PLUGIN_URL . '/assets/admin/css/rental_lists.css', array(), time(), 'all' );
 				wp_enqueue_script( 'mp_plugin_global', RBFW_PLUGIN_URL . '/assets/mp_style/mp_script.js', array(), time(), true );
+				wp_enqueue_script( 'rental_lists', RBFW_PLUGIN_URL . '/assets/admin/js/rental_lists.js', array(), time(), true );
 				//loading owl carousel css
 				wp_enqueue_style( 'owl.carousel.min', RBFW_PLUGIN_URL . '/css/owl.carousel.min.css' );
 				wp_enqueue_style( 'owl.theme.default', RBFW_PLUGIN_URL . '/css/owl.theme.default.min.css' );
@@ -43,7 +45,14 @@
 				wp_enqueue_script( 'jquery.modal.min', plugin_dir_url( __DIR__ ) . 'admin/js/jquery.modal.min.js', array( 'jquery' ), '0.9.1', false );
 				wp_enqueue_script( 'rbfw_script', RBFW_PLUGIN_URL . '/assets/mp_script/rbfw_script.js', array(), time(), true );
 				wp_enqueue_script( 'md_script', RBFW_PLUGIN_URL . '/assets/mp_script/md_script.js', array(), time(), true );
-				wp_enqueue_script( 'sd_script', RBFW_PLUGIN_URL . '/assets/mp_script/sd_script.js', array(), time(), true );
+
+                wp_enqueue_script( 'sd_script', RBFW_PLUGIN_URL . '/assets/mp_script/sd_script.js', array(), time(), true );
+
+                wp_localize_script('rbfw_script', 'rbfw_translation', array(
+                    'return_time' => __('Return Time', 'booking-and-rental-manager-for-woocommerce'),
+                    'pickup_time' => __('Pickup Time', 'booking-and-rental-manager-for-woocommerce'),
+                ));
+
 				wp_enqueue_script( 'resort_script', RBFW_PLUGIN_URL . '/assets/mp_script/resort_script.js', array(), time(), true );
 				do_action( 'rbfw_frontend_enqueue_scripts' );
 				/**************************
@@ -103,7 +112,20 @@
 				wp_enqueue_style( 'rbfw-style', plugin_dir_url( __DIR__ ) . 'css/rbfw_style.css', array() );
 				wp_enqueue_style( 'rbfw-rent-items', plugin_dir_url( __DIR__ ) . 'css/rbfw_rent_items.css', array() );
 				wp_enqueue_script( 'jquery.modal.min', plugin_dir_url( __DIR__ ) . 'admin/js/jquery.modal.min.js', array( 'jquery' ), '0.9.1', false );
-				wp_enqueue_script( 'rbfw_script', RBFW_PLUGIN_URL . '/assets/mp_script/rbfw_script.js', array(), time(), true );
+
+
+                wp_enqueue_script( 'rbfw_script', RBFW_PLUGIN_URL . '/assets/mp_script/rbfw_script.js', array(), time(), true );
+
+
+
+                wp_localize_script('rbfw_script', 'rbfw_translation', array(
+                    'return_time' => __('Return Time', 'booking-and-rental-manager-for-woocommerce'),
+                    'pickup_time' => __('Pickup Time', 'booking-and-rental-manager-for-woocommerce'),
+                ));
+
+
+                
+
 				wp_enqueue_script( 'md_script', RBFW_PLUGIN_URL . '/assets/mp_script/md_script.js', array(), time(), true );
 				wp_enqueue_script( 'resort_script', RBFW_PLUGIN_URL . '/assets/mp_script/resort_script.js', array(), time(), true );
 				wp_enqueue_script( 'sd_script', RBFW_PLUGIN_URL . '/assets/mp_script/sd_script.js', array(), time(), true );
@@ -132,6 +154,9 @@
 						'rent_type'        => $rent_type,
 					)
 				);
+
+
+
 				if ( rbfw_woo_install_check() == 'Yes' ) {
 					$view_more_feature_btn_text = $rbfw->get_option_trans( 'rbfw_text_view_more_features', 'rbfw_basic_translation_settings', esc_html__( 'Hide More', 'booking-and-rental-manager-for-woocommerce' ) );
 					$hide_more_feature_btn_text = $rbfw->get_option_trans( 'rbfw_text_hide_more_features', 'rbfw_basic_translation_settings', esc_html__( 'Load More', 'booking-and-rental-manager-for-woocommerce' ) );
