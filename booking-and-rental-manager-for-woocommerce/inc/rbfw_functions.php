@@ -158,6 +158,11 @@
 				'src'          => true,
             ),
 
+            'strong'   => array(
+                'id'          => true,
+                'class'          => true,
+            ),
+
 		);
 
 		return $allowed_html;
@@ -183,7 +188,6 @@
 	}
 	function rbfw_get_option( $option, $section, $default = '' ) {
 		global $rbfw;
-
 		return $rbfw->get_option_trans( $option, $section, $default );
 	}
 	function rbfw_string( $option_name, $default_string ) {
@@ -394,7 +398,9 @@
 			$pinterestURL .= $rbfwThumbnail[0];
 		}
 		$pinterestURL .= '&amp;description=' . $rbfwTitle; ?>
+		
         <div class="rbfw-post-sharing">
+			<span><?php _e('Share','booking-and-rental-manager-for-woocommerce') ?></span>
             <a href="<?php echo esc_url( $facebookURL ); ?>">
                 <i class="fab fa-facebook-f"></i>
             </a>
@@ -693,14 +699,16 @@
 				let data_loaded = parseInt(jQuery('#rbfw_features_icon_list_wrapper').attr('data-loaded'));
 				var data = {
 					'action': 'rbfw_load_more_icons',
-					'data_loaded': data_loaded
+					'data_loaded': data_loaded,
+                    'nonce': rbfw_ajax.nonce
 				};
 				jQuery.ajax({
 					type: 'POST',
 					url: <?php echo json_encode(esc_url(admin_url('admin-ajax.php'))); ?>, // Escape URL
 					data: {
 						'action': 'rbfw_load_more_icons',
-						'data_loaded': data_loaded
+						'data_loaded': data_loaded,
+                        'nonce': rbfw_ajax.nonce
 					},
 					beforeSend: function () {
 						jQuery('.rbfw_load_more_icons').append('<span class="rbfw_load_more_icons_loader"><i class="fas fa-spinner fa-spin"></i></span>');
@@ -709,7 +717,7 @@
 						console.log('response', response);
 						jQuery('.rbfw_load_more_icons_loader').remove();
 						// Escape response to ensure no unwanted HTML or scripts
-						jQuery('.rbfw_features_icon_list_body').append(esc_html(response));
+						jQuery('.rbfw_features_icon_list_body').append(response);
 						data_loaded = data_loaded + 100;
 						jQuery('#rbfw_features_icon_list_wrapper').attr('data-loaded', data_loaded);
 						if (response == '') {
@@ -779,12 +787,14 @@
 	}
 	add_action( 'wp_ajax_rbfw_load_more_icons', 'rbfw_load_more_icons_func' );
 	function rbfw_load_more_icons_func() {
+
 		if ( ! ( isset( $_POST['nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'rbfw_ajax_action' ) ) ) {
 			return;
 		}
-		$data_loaded       = isset( $_POST['data_loaded'] ) ? sanitize_text_field( sanitize_text_field( wp_unslash( $_POST['data_loaded'] ) ) ) : '';
+        $data_loaded       = isset( $_POST['data_loaded'] ) ? sanitize_text_field( sanitize_text_field( wp_unslash( $_POST['data_loaded'] ) ) ) : '';
 		$icon_library      = new rbfw_icon_library();
 		$icon_library_list = $icon_library->rbfw_fontawesome_icons();
+
 		ob_start();
 		$i      = 0;
 		$target = $data_loaded + 100;
@@ -887,6 +897,9 @@
 			case 'others':
 				return 'Others';
 				break;
+            case 'multiple_items':
+                return 'Multiple day for multiple items';
+                break;
 			default:
 				return;
 		}
@@ -2667,7 +2680,7 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
         );
     }
 
-    return ['duration_price' => $duration_price, 'total_days' => $total_days, 'actual_days' => $actual_days, 'hours' => $hours,'pricing_applied'=>$_COOKIE['pricing_applied']];
+    return ['duration_price' => $duration_price, 'total_days' => $total_days, 'actual_days' => $actual_days, 'hours' => $hours,'pricing_applied'=>isset($_COOKIE['pricing_applied'])?$_COOKIE['pricing_applied']:''];
 }
 
 
