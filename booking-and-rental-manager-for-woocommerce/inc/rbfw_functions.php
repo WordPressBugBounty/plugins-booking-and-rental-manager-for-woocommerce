@@ -106,13 +106,14 @@
 				'data-key'    => true,
 				'placeholder' => true,
 				'checked' => true,
-				'checked' => true,
+				'required' => true,
 			),
             'select'   => array(
                 'style'       => true, // Allows inline styles
                 'class'       => true,
                 'name'        => true,
                 'id'          => true,
+                'required'    => true,
             ),
             'option'   => array(
                 'style'       => true, // Allows inline styles
@@ -163,6 +164,15 @@
                 'class'          => true,
             ),
 
+            'figure'   => array(
+                'id'          => true,
+                'class'          => true,
+            ),
+
+
+
+
+
 		);
 
 		return $allowed_html;
@@ -178,7 +188,7 @@
 			'hide_empty' => false,
 		) );
 		$arr   = array(
-			'' => rbfw_string_return( 'rbfw_text_pls_select_location', esc_html__( 'Please Select a Location', 'booking-and-rental-manager-for-woocommerce' ) )
+			'' => esc_html__( 'Please Select a Location', 'booking-and-rental-manager-for-woocommerce' )
 		);
 		foreach ( $terms as $_terms ) {
 			$arr[ $_terms->name ] = $_terms->name;
@@ -190,11 +200,13 @@
 		global $rbfw;
 		return $rbfw->get_option_trans( $option, $section, $default );
 	}
+	// Deprecated function - use esc_html_e() instead
 	function rbfw_string( $option_name, $default_string ) {
-		echo esc_html( rbfw_get_option( $option_name, 'rbfw_basic_translation_settings', $default_string ) );
+		echo esc_html( $default_string );
 	}
+	// Deprecated function - use __() instead
 	function rbfw_string_return( $option_name, $default_string ) {
-		return rbfw_get_option( $option_name, 'rbfw_basic_translation_settings', $default_string );
+		return $default_string;
 	}
 	function rbfw_get_datetime( $date, $type = 'date-time-text' ) {
 		global $rbfw;
@@ -640,10 +652,10 @@
             <script>
                 jQuery(document).ready(function () {
                     // tab tooltip
-                    let highlighted_features = "<?php echo esc_html( $rbfw->get_option_trans( 'rbfw_text_hightlighted_features', 'rbfw_basic_translation_settings', esc_html__( 'Highlighted Features', 'booking-and-rental-manager-for-woocommerce' ) ) ); ?>";
-                    let description = "<?php echo esc_html( $rbfw->get_option_trans( 'rbfw_text_description', 'rbfw_basic_translation_settings', esc_html__( 'Description', 'booking-and-rental-manager-for-woocommerce' ) ) ); ?>";
-                    let faq = "<?php echo esc_html( $rbfw->get_option_trans( 'rbfw_text_faq', 'rbfw_basic_translation_settings', esc_html__( 'Frequently Asked Questions', 'booking-and-rental-manager-for-woocommerce' ) ) ); ?>";
-                    let reviews = "<?php echo esc_html( $rbfw->get_option_trans( 'rbfw_text_reviews', 'rbfw_basic_translation_settings', esc_html__( 'Reviews', 'booking-and-rental-manager-for-woocommerce' ) ) ); ?>";
+                    let highlighted_features = "<?php esc_html_e( 'Highlighted Features', 'booking-and-rental-manager-for-woocommerce' ); ?>";
+                    let description = "<?php esc_html_e( 'Description', 'booking-and-rental-manager-for-woocommerce' ); ?>";
+                    let faq = "<?php esc_html_e( 'Frequently Asked Questions', 'booking-and-rental-manager-for-woocommerce' ); ?>";
+                    let reviews = "<?php esc_html_e( 'Reviews', 'booking-and-rental-manager-for-woocommerce' ); ?>";
                     // tippy('.rbfw-features', {content: highlighted_features,theme: 'blue',placement: 'right'});
                     // tippy('.rbfw-description', {content: description,theme: 'blue',placement: 'right'});
                     // tippy('.rbfw-faq', {content: faq,theme: 'blue',placement: 'right'});
@@ -2298,10 +2310,13 @@
 	}
 	function rbfw_get_available_times_particulars( $rbfw_id, $start_date, $type = '', $selector = '' ) {
 
-		$particulars_data = get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ? maybe_unserialize( get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ) : [];
+        $rbfw_particular_switch = get_post_meta($rbfw_id, 'rbfw_particular_switch', true) ? get_post_meta($rbfw_id, 'rbfw_particular_switch', true) : 'off';
+
+
+        $particulars_data = get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ? maybe_unserialize( get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ) : [];
 		$the_array   = [];
 
-		if(!empty($particulars_data)){
+		if($rbfw_particular_switch =='on' && !empty($particulars_data)){
 
 			foreach ( $particulars_data as $single ) {
 				$pd_dates_array = getAllDates( $single['start_date'], $single['end_date'] );
@@ -3470,4 +3485,37 @@ function rbfw_end_time(){
     }else{
         return '00:00:00';
     }
+}
+
+function findMinimumPrice($items) {
+    $minPrice = PHP_INT_MAX;
+    $minItem  = null;
+    $minType  = null;
+
+    foreach ($items as $item) {
+        foreach (['hourly_price', 'daily_price', 'weekly_price', 'monthly_price'] as $priceType) {
+            if (!empty($item[$priceType]) && $item[$priceType] < $minPrice) {
+                $minPrice = $item[$priceType];
+                $minItem  = $item['item_name'];
+                $minType  = $priceType;
+            }
+        }
+    }
+
+    return [
+        'item_name' => $minItem,
+        'price_type' => $minType,
+        'price' => $minPrice
+    ];
+}
+
+
+add_action( 'rbfw_ticket_feature_info', 'rbfw_ticket_feature_info' );
+function rbfw_ticket_feature_info(){
+?>
+<div class="rbfw-bikecarsd-calendar-header">
+	<div class="rbfw-bikecarsd-calendar-header-feature"><i class="fas fa-clock"></i> <?php rbfw_string('rbfw_text_real_time_availability',__('Real-time availability','booking-and-rental-manager-for-woocommerce')); ?></div>
+	<div class="rbfw-bikecarsd-calendar-header-feature"><i class="fas fa-bolt"></i> <?php rbfw_string('rbfw_text_instant_confirmation',__('Instant confirmation','booking-and-rental-manager-for-woocommerce')); ?></div>
+</div>
+<?php
 }

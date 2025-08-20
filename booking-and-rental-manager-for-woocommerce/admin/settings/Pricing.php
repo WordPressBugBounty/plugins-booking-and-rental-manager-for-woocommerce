@@ -81,23 +81,53 @@
 							<?php esc_html_e( 'Rent Types', 'booking-and-rental-manager-for-woocommerce' ); ?>
                         </label>
                         <p><?php esc_html_e( 'Price will be changed based on this type selection', 'booking-and-rental-manager-for-woocommerce' ); ?></p>
+                    
+					<?php 
+                        $rbfw_item_type = get_post_meta( $post_id, 'rbfw_item_type', true );
+                        $rbfw_item_type = $rbfw_item_type?$rbfw_item_type:'bike_car_sd';
+                        $rbfw_item_type = ($rbfw_item_type=='equipment' || $rbfw_item_type=='dress' || $rbfw_item_type=='others')?"bike_car_md":$rbfw_item_type;
+                        $item_type = [
+                            'bike_car_sd'     =>[
+                                                    'name' =>__( 'Single day', 'booking-and-rental-manager-for-woocommerce' ) ,
+                                                    'desc' => 'This option is ideal for rentals such as <b>bikes</b>, <b>boats</b>, <b>yachts</b>, <b>kayaks</b>, or similar items that can be hired for a full day, by the hour, or for a specific time slot within a single day. It provides flexibility for both hourly and fixed-duration',
+                                                    'icon' => 'fa fa-calendar-day'
+                                                ],
+                            'bike_car_md'     =>[
+                                                    'name' => __( 'Multiple day', 'booking-and-rental-manager-for-woocommerce' ),
+                                                    'desc' => 'This option is perfect for rentals like <b>cars</b>, <b>equipment</b>, <b>dresses</b>, <b>sports kits</b>, or similar items that customers can hire for one day or several days. Customers can select a date range for their booking, and you can set pricing by the hour, per day, or for weekends.',   
+                                                    'icon' => 'fa fa-calendar-alt'
+                                                ],
+                            'resort'          =>[
+                                                    'name' => __( 'Resort', 'booking-and-rental-manager-for-woocommerce' ),
+                                                    'desc' => 'This option is designed for resorts or similar accommodations where you can set <b>day-night</b> price or <b>day-long</b> price. The total price is automatically calculated based on the number of days the customer selects for their stay.',                       
+                                                    'icon' => 'fa fa-hotel'
+                                                ],
+                            'appointment'     =>[
+                                                    'name' => __( 'Appointment', 'booking-and-rental-manager-for-woocommerce' ),
+                                                    'desc' => 'This option is ideal for appointment-based services such as <b>barbers</b>, <b>spas</b>, <b>yoga classes</b>, <b>consultations</b>, <b>hair care</b>, and similar activities. Pricing can be set according to the specific service offered.',                   
+                                                    'icon' => 'fa fa-calendar-check'
+                                                ],  
+                            'multiple_items'  =>[
+                                                    'name' => __( 'Multiple day for multiple items', 'booking-and-rental-manager-for-woocommerce' ),
+                                                    'desc' => 'This option is perfect for renting out multiple items over multiple days. You can set pricing by the <b>hour</b>, <b>per day</b>, <b>per week</b>, or <b>per month</b>, giving customers flexible rental choices.',
+                                                    'icon' => 'fa fa-layer-group'
+                                                ],
+                        ];
+                    ?>
+
+                        <div class="rbfw-tent-types">
+                            <div class="rbfw-rent-type-desc"></div>
+                            <input type="hidden" name="rbfw_item_type" id="rbfw_item_type" value="<?php echo esc_attr($rbfw_item_type); ?>">
+                            <?php foreach ( $item_type as $key => $value ): ?>
+                                <div class="rbfw-rent-type <?php echo esc_attr( $key == $rbfw_item_type ? 'selected' : '' ); ?>" data-rent-type="<?php echo esc_attr( $key ); ?>" data-rent-type-desc="<?php echo esc_html( $value['desc'] ); ?>"> 
+                                    <div class="icon"><i class="<?php echo esc_html( $value['icon'] ); ?>"></i></div>
+                                    <?php echo esc_html( $value['name'] ); ?> 
+                                </div>
+                                
+                            <?php endforeach; ?>
+                            
+                        </div>
                     </div>
-					<?php $rbfw_item_type = get_post_meta( $post_id, 'rbfw_item_type', true ) ? get_post_meta( $post_id, 'rbfw_item_type', true ) : 'bike_car_sd'; ?>
-					<?php $item_type = [
-						'bike_car_sd' => 'Rent item for single day',
-						'bike_car_md' => 'Rent item for multiple day',
-						'resort'      => 'Resort',
-						'equipment'   => 'Equipment',
-						'dress'       => 'Dress',
-						'appointment' => 'Appointment',
-						'others'      => 'Others',
-                        'multiple_items' => 'Multiple day for multiple items',
-					]; ?>
-                    <select name="rbfw_item_type" id="rbfw_item_type">
-						<?php foreach ( $item_type as $kay => $value ): ?>
-                            <option <?php echo esc_attr( $kay == $rbfw_item_type ? 'selected' : '' ); ?> value="<?php echo esc_attr( $kay ); ?>"> <?php echo esc_html( $value ); ?> </option>
-						<?php endforeach; ?>
-                    </select>
                 </section>
 				<?php
 			}
@@ -288,6 +318,7 @@
 
             public function multiple_items( $post_id ) {
                 $rbfw_item_type                  = get_post_meta( $post_id, 'rbfw_item_type', true ) ? get_post_meta( $post_id, 'rbfw_item_type', true ) : 'bike_car_sd';
+                $rbfw_enable_time_picker    = get_post_meta( $post_id, 'rbfw_enable_time_picker', true ) ? get_post_meta( $post_id, 'rbfw_enable_time_picker', true ) : 'yes';
 
                 $pricing_types           = get_post_meta( $post_id, 'pricing_types', true ) ? get_post_meta( $post_id, 'pricing_types', true ) : [];
                 $multiple_items_info           = get_post_meta( $post_id, 'multiple_items_info', true ) ? get_post_meta( $post_id, 'multiple_items_info', true ) : [];
@@ -295,13 +326,11 @@
                 $checked = (get_the_title($post_id)=='Auto Draft')?'checked':'';
                 $checked_item = (get_the_title($post_id)=='Auto Draft')?true:false;
 
-
-
                 ?>
-                <div class="rbfw_multiple_items <?php echo esc_attr( $rbfw_item_type == 'multiple_items') ? 'show' : 'hide'; ?>">
-                    <div class="container">
-                        <div class="content">
-                            <div class="form-container">
+
+                <section class="rbfw_multiple_items <?php echo esc_attr( $rbfw_item_type == 'multiple_items') ? 'show' : 'hide'; ?>">
+                    <div class="">
+                            <div class="">
                                 <!-- Global Pricing Options -->
                                 <div class="pricing-options">
                                     <h3>🔧 <?php esc_html_e('Enable Price Types (applies to all items)','booking-and-rental-manager-for-woocommerce'); ?></h3>
@@ -389,12 +418,28 @@
                                 </button>
                             </div>
 
-                            <input type="hidden" name="rbfw_enable_time_picker" value="yes">
+                        <div class="rbfw_multi_day_price_conf">
+                            <div class="item">
+                                <div class="item-left">
+                                    <div class="label">Enable Time Picker</div>
+                                    <div class="description">
+                                        Toggle to enable time selection for more precise rental periods.
+                                    </div>
+                                </div>
+                                <div class="item-right">
+                                    <div class="toggle time-picker-toggle <?php echo esc_attr( $rbfw_enable_time_picker == 'yes' ? 'active' : '' ); ?>">
+                                        <div class="toggle-knob"></div>
+                                    </div>
+                                    <input type="hidden" name="rbfw_enable_time_picker" class="rbfw_enable_time_picker" value="<?php echo esc_attr( $rbfw_enable_time_picker ); ?>">
+                                </div>
+                            </div>
+                        </div>
 
-                            <?php $this->multiple_time_slot_with_particular( $post_id, 'yes','md' ); ?>
+
+
+                            <?php $this->multiple_time_slot_with_particular( $post_id, 'yes','md','mi' ); ?>
 
                         </div>
-                    </div>
 
                     <style>
                         * {
@@ -1007,7 +1052,10 @@
                         updateRemoveButtons();
                     </script>
 
-                </div>
+                </section>
+
+
+
                 <?php
             }
 
@@ -1602,7 +1650,7 @@
 
 
 
-            public function multiple_time_slot_with_particular($post_id, $rbfw_enable_time_picker,$type='sd')
+            public function multiple_time_slot_with_particular($post_id, $rbfw_enable_time_picker,$type='sd' , $mi='')
             {
                 ?>
                 <div class="time-slots-section" style="display: <?php echo esc_attr( $rbfw_enable_time_picker == 'yes' ? 'block' : 'none' ); ?>;">
@@ -1673,7 +1721,11 @@
                             </div>
                             <?php $rbfw_particular_switch = get_post_meta( $post_id, 'rbfw_particular_switch', true ) ? get_post_meta( $post_id, 'rbfw_particular_switch', true ) : 'off'; ?>
                             <label class="switch">
-                                <input type="checkbox" name="rbfw_particular_switch" value="<?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? $rbfw_particular_switch : 'off' ); ?>" <?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? 'checked' : '' ); ?>>
+                                <?php if($mi=='mi'){ ?>
+                                    <input type="checkbox" name="rbfw_particular_switch_mi" class="rbfw_particular_switch" value="<?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? $rbfw_particular_switch : 'off' ); ?>" <?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? 'checked' : '' ); ?>>
+                                <?php }else{ ?>
+                                    <input type="checkbox" name="rbfw_particular_switch_<?php echo esc_attr($type) ?>" class="rbfw_particular_switch" value="<?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? $rbfw_particular_switch : 'off' ); ?>" <?php echo esc_attr( ( $rbfw_particular_switch == 'on' ) ? 'checked' : '' ); ?>>
+                                <?php } ?>
                                 <span class="slider round"></span>
                             </label>
                         </section>
@@ -1878,6 +1930,8 @@
 
                     $rbfw_item_type          = isset( $_POST['rbfw_item_type'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_item_type'] ) ) : '';
 
+
+
                     if($rbfw_item_type=='bike_car_md' || $rbfw_item_type=='equipment' || $rbfw_item_type=='dress' || $rbfw_item_type=='others' || $rbfw_item_type=='multiple_items'){
                         $rdfw_available_time              = isset( $input_data_sabitized['rdfw_available_time'] ) ? $input_data_sabitized['rdfw_available_time'] : [];
                         $particulars_data           = isset( $_POST['rbfw_particulars'] ) ? RBFW_Function::data_sanitize( $_POST['rbfw_particulars'] ) : [];
@@ -1929,11 +1983,15 @@
 					$manage_inventory_as_timely = isset( $_POST['manage_inventory_as_timely'] ) ? sanitize_text_field( wp_unslash( $_POST['manage_inventory_as_timely'] ) ) : 'off';
 					$enable_specific_duration = isset( $_POST['enable_specific_duration'] ) ? sanitize_text_field( wp_unslash( $_POST['enable_specific_duration'] ) ) : 'off';
 
-                    $rbfw_particular_switch     = isset( $_POST['rbfw_particular_switch'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_particular_switch'] ) ) : 'off';
 
+                    if($rbfw_item_type=='bike_car_md' || $rbfw_item_type=='equipment' || $rbfw_item_type=='dress' || $rbfw_item_type=='others') {
+                        $rbfw_particular_switch = isset($_POST['rbfw_particular_switch_md']) ? sanitize_text_field(wp_unslash($_POST['rbfw_particular_switch_md'])) : 'off';
+                   }elseif ($rbfw_item_type=='multiple_items'){
+                        $rbfw_particular_switch = isset($_POST['rbfw_particular_switch_mi']) ? sanitize_text_field(wp_unslash($_POST['rbfw_particular_switch_mi'])) : 'off';
+                    }elseif ($rbfw_item_type=='bike_car_sd' || $rbfw_item_type=='appointment'){
+                        $rbfw_particular_switch = isset($_POST['rbfw_particular_switch_sd']) ? sanitize_text_field(wp_unslash($_POST['rbfw_particular_switch_sd'])) : 'off';
+                    }
 
-
-					update_post_meta( $post_id, 'rbfw_item_type', $rbfw_item_type );
 
                     update_post_meta( $post_id, 'rbfw_enable_monthly_rate', $rbfw_enable_monthly_rate );
                     update_post_meta( $post_id, 'rbfw_monthly_rate', $rbfw_monthly_rate );
@@ -1943,6 +2001,9 @@
                     update_post_meta( $post_id, 'rbfw_weekly_rate', $rbfw_weekly_rate );
                     update_post_meta( $post_id, 'rbfw_enable_day_threshold_for_weekly', $rbfw_enable_day_threshold_for_weekly );
                     update_post_meta( $post_id, 'rbfw_day_threshold_for_weekly', $rbfw_day_threshold_for_weekly );
+
+
+                    update_post_meta( $post_id, 'rbfw_item_type', $rbfw_item_type );
 
                     update_post_meta( $post_id, 'rbfw_enable_daily_rate', $rbfw_enable_daily_rate );
 					update_post_meta( $post_id, 'rbfw_daily_rate', $daily_rate );
