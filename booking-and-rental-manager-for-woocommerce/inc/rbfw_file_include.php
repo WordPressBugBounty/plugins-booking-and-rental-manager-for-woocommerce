@@ -37,9 +37,11 @@ require_once RBFW_PLUGIN_DIR . '/support/blocks/block-support.php';
 
 
 
-add_action('init', 'rbfw_category_update');
-function rbfw_category_update(){
-    $rbfw_category_update = get_option('rbfw_enable_time_picker_option');
+add_action('init', 'rbfw_new_installation_or_update');
+function rbfw_new_installation_or_update(){
+
+
+   /* $rbfw_category_update = get_option('rbfw_enable_time_picker_option');
 
     if($rbfw_category_update != 'yes'){
 
@@ -67,7 +69,7 @@ function rbfw_category_update(){
             endwhile;
         endif;
         update_option( 'rbfw_enable_time_picker_option', 'yes' );
-    }
+    }*/
 }
 
 /*************************************************

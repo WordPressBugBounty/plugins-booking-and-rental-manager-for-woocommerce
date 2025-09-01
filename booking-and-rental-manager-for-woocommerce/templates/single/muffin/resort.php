@@ -137,7 +137,7 @@
 						?>
                     </ul>
 					<?php if ( $total_features >= 10 ) : ?>
-                        <div class="rbfw_see_more_category" id="rbfw_see_more_category-<?php echo esc_attr( $post_id ); ?>">See more</div>
+                        <div class="rbfw_see_more_category" id="rbfw_see_more_category-<?php echo esc_attr( $post_id ); ?>"><?php echo esc_html__( 'See more','booking-and-rental-manager-for-woocommerce' ) ?></div>
 					<?php endif; ?>
 				<?php endif; ?>
             </div>
@@ -283,7 +283,15 @@
 					<?php do_action( 'rbfw_muff_review_tab', $post_id ); ?>
                 </div>
                 <div class="rbfw_muff_review_write_btn_wrapper">
-                    <button class="rbfw_muff_review_write_btn"><?php echo esc_html( $rbfw->get_option( 'rbfw_text_write_review', 'rbfw_basic_translation_settings', __( 'Write Review', 'booking-and-rental-manager-for-woocommerce' ) ) ); ?></button>
+                    <button class="rbfw_muff_review_write_btn">
+                        <?php
+                        if($rbfw->get_option_trans('rbfw_text_write_review', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
+                            echo esc_html($rbfw->get_option_trans('rbfw_text_write_review', 'rbfw_basic_translation_settings'));
+                        }else{
+                            echo esc_html__('Write Review','booking-and-rental-manager-for-woocommerce');
+                        }
+                        ?>
+                    </button>
                 </div>
             </div>
             <div class="rbfw_muff_faq_tab_contents">

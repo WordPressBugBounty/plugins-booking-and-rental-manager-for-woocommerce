@@ -2,8 +2,6 @@
     
     $(document).ready(function() {
 
-        let rbfw_today_booking_enable = $('.rbfw_today_booking_enable').val();
-
         datepicker_inline();
 
         jQuery('body').on('focusin', '.pickup_date_timely', function(e) {
@@ -12,7 +10,7 @@
                 minDate: 0,
                 beforeShowDay: function(date)
                 {
-                    return rbfw_off_day_dates(date,'md',rbfw_today_booking_enable);
+                    return rbfw_off_day_dates(date,'md',rbfw_js_variables.rbfw_today_booking_enable);
                 },
                 onSelect: function (dateString, data) {
                     let date_ymd = data.selectedYear + '-' + ('0' + (parseInt(data.selectedMonth) + 1)).slice(-2) + '-' + ('0' + parseInt(data.selectedDay)).slice(-2);
@@ -152,6 +150,7 @@
             var rbfw_service_price = jQuery('#rbfw_item_quantity').val() * service_price;
             jQuery('#rbfw_service_price').val(rbfw_service_price);
             jQuery('#rbfw_start_time').val(start_time);
+            jQuery('#rbfw_service_type_for_st').val(service_type);
 
             jQuery('.single-type-timely').each(function(index, element) {
                 jQuery('.single-type-timely').removeClass('selected');
@@ -424,10 +423,29 @@ function calculateTotal() {
 function rbfw_price_calculation_sd(){
     let rbfw_service_price = parseInt(jQuery('#rbfw_service_price').val());
     var rbfw_es_service_price = parseInt(jQuery('#rbfw_es_service_price').val());
-    var total_price = rbfw_service_price + rbfw_es_service_price;
+    var sub_total_price = rbfw_service_price + rbfw_es_service_price;
 
     jQuery('.duration-costing span').text(rbfw_translation.currency + rbfw_service_price.toFixed(2));
     jQuery('.extra_service_cost span').text(rbfw_translation.currency + rbfw_es_service_price.toFixed(2));
+
+
+    let rbfw_security_deposit_actual_amount = 0;
+    if(jQuery('#rbfw_security_deposit_enable').val() == 'yes'){
+        let rbfw_security_deposit_amount  = jQuery('#rbfw_security_deposit_amount').val();
+        if (jQuery('#rbfw_security_deposit_type').val() == 'percentage'){
+            rbfw_security_deposit_actual_amount = (rbfw_security_deposit_amount / 100) * sub_total_price;
+        }else{
+            rbfw_security_deposit_actual_amount = rbfw_security_deposit_amount;
+        }
+    }
+
+    var total_price = sub_total_price + parseFloat(rbfw_security_deposit_actual_amount);
+    if(rbfw_security_deposit_actual_amount){
+        jQuery('.security_deposit').show();
+        jQuery('.security_deposit span').html(rbfw_translation.currency + parseFloat(rbfw_security_deposit_actual_amount).toFixed(2));
+    }
+
+
     jQuery('.subtotal span').text(rbfw_translation.currency + total_price.toFixed(2));
     jQuery('.total span').text(rbfw_translation.currency + total_price.toFixed(2));
 }
@@ -441,7 +459,7 @@ function datepicker_inline(){
         selectOtherMonths: true,
         beforeShowDay: function(date)
         {
-            return rbfw_off_day_dates(date,'md',rbfw_today_booking_enable);
+            return rbfw_off_day_dates(date,'md',rbfw_js_variables.rbfw_today_booking_enable);
         },
         onSelect: function (dateString, data) {
             let date_ymd = data.selectedYear + '-' + ('0' + (parseInt(data.selectedMonth) + 1)).slice(-2) + '-' + ('0' + parseInt(data.selectedDay)).slice(-2);
@@ -487,7 +505,7 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
                     $el.attr('data-price', service_info[type].price);
                     $el.attr('data-available_quantity', service_info[type].stock);
                     // (Optional) Update displayed price text
-                    $el.find('.price').text('€' + service_info[type].price);
+                    $el.find('.price').text(rbfw_translation.currency + service_info[type].price);
                 }
             });
 

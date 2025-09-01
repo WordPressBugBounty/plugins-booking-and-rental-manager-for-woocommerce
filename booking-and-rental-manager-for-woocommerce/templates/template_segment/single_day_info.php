@@ -53,25 +53,13 @@ if(isset($_POST['post_id'])){
            <?php echo esc_html__( 'Back to Previous Step','booking-and-rental-manager-for-woocommerce' );  ?>
         </a>
 
-        <?php if($is_muffin_template == 0){ ?>
+
             <div class="rbfw_step_selected_date" data-time="<?php echo esc_attr($selected_time); ?>">
                 <i class="fas fa-calendar-check"></i>
                 <?php echo esc_html__( 'You selected','booking-and-rental-manager-for-woocommerce' ) ?>: <?php echo esc_html($result.' '.$selected_time); ?>
             </div>
-        <?php } ?>
 
-        <?php if($is_muffin_template == 1){ ?>
-            <div class="rbfw_step_selected_date rbfw_muff_selected_date" step="3">
-                <div class="rbfw_muff_selected_date_col">
-                    <label><i class="fa-regular fa-calendar-days"></i> <?php echo esc_html__( 'Date','booking-and-rental-manager-for-woocommerce' ); ?></label>
-                    <span class="rbfw_muff_selected_date_value"><?php echo esc_html($result); ?></span>
-                </div>
-                <div class="rbfw_muff_selected_date_col">
-                    <label><i class="fa-regular fa-clock"></i> <?php echo esc_html__( 'Time','booking-and-rental-manager-for-woocommerce' ); ?></label>
-                    <span class="rbfw_muff_selected_date_value"><?php echo esc_html(gmdate(get_option('time_format'), strtotime($selected_time)));  ?></span>
-                </div>
-            </div>
-        <?php } ?>
+
 
 
         <div class="">
@@ -269,6 +257,12 @@ if(isset($_POST['post_id'])){
                             <?php echo esc_html__( 'Subtotal','booking-and-rental-manager-for-woocommerce' ); ?>
                             <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
                         </li>
+
+                        <li class="security_deposit" style="display:none;">
+                            <?php echo esc_html((!empty(get_post_meta($id, 'rbfw_security_deposit_label', true)) ? get_post_meta($id, 'rbfw_security_deposit_label', true) : __('Security Deposit','booking-and-rental-manager-for-woocommerce'))); ?>
+                            <span></span>
+                        </li>
+
                         <li class="total">
                             <strong><?php echo esc_html__( 'Total','booking-and-rental-manager-for-woocommerce' ); ?></strong>
                             <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>

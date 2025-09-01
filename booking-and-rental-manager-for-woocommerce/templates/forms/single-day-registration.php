@@ -25,6 +25,10 @@
 
     $available_qty_info_switch = get_post_meta($rbfw_id, 'rbfw_available_qty_info_switch', true) ? get_post_meta($rbfw_id, 'rbfw_available_qty_info_switch', true) : 'no';
 
+    $rbfw_enable_security_deposit = get_post_meta($rbfw_id, 'rbfw_enable_security_deposit', true) ? get_post_meta($rbfw_id, 'rbfw_enable_security_deposit', true) : 'no';
+    $rbfw_security_deposit_type = get_post_meta($rbfw_id, 'rbfw_security_deposit_type', true) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_type', true) : 'percentage';
+    $rbfw_security_deposit_amount = get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) : 0;
+
 
 ?>
 
@@ -164,9 +168,7 @@
                         </div>
                     </div>
 
-                    <input type="hidden" name="end_date" value="2025-08-07">
-                    <input type="hidden" name="end_time" value="08:00:00">
-                    <input type="hidden" name="service_type" value="type 1">
+                    <input type="hidden" name="service_type" id="rbfw_service_type_for_st" value="">
 
                     <div class="rbfw_bikecarsd_pricing_table_container rbfw-bikecarsd-step rbfw_extra_service_sd" style="display: none">
                         <div class="">
@@ -227,6 +229,15 @@
                                 </div>
                             <?php } ?>
 
+                            <?php
+                            /* Include Custom Registration Form */
+                            if(class_exists('Rbfw_Reg_Form')){
+                                $reg_form = new Rbfw_Reg_Form();
+                                echo wp_kses($reg_form->rbfw_generate_regf_fields($rbfw_id),  rbfw_allowed_html());
+                            }
+                            /* End: Include Custom Registration Form */
+                            ?>
+
                             <div class="item rbfw_bikecarsd_price_summary">
                                 <label class="rbfw-single-right-heading"><?php _e('Booking Summary','booking-and-rental-manager-for-woocommerce'); ?></label>
                                 <div class="item-content rbfw-costing">
@@ -236,7 +247,6 @@
                                             <span>
                                                 <?php echo wp_kses(wc_price(0) , rbfw_allowed_html()); ?>
                                             </span>
-
                                         </li>
                                         <?php if(!empty($rbfw_extra_service_data)){ ?>
                                             <li class="resource-costing extra_service_cost rbfw-cond">
@@ -251,6 +261,10 @@
                                             <span>
                                                 <?php echo wp_kses(wc_price(0) , rbfw_allowed_html()); ?>
                                             </span>
+                                        </li>
+                                        <li class="security_deposit" style="display:none;">
+                                            <?php echo esc_html((!empty(get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true)) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true) : __('Security Deposit','booking-and-rental-manager-for-woocommerce'))); ?>
+                                            <span></span>
                                         </li>
                                         <li class="total">
                                             <strong><?php esc_html_e('Total','booking-and-rental-manager-for-woocommerce'); ?></strong>
@@ -277,11 +291,7 @@
 				</div>
 
                 <?php
-                $rbfw_regf_info = [];
-                if(class_exists('Rbfw_Reg_Form')){
-                    $ClassRegForm = new Rbfw_Reg_Form();
-                    $rbfw_regf_info = $ClassRegForm->rbfw_get_regf_all_fields_name($post_id);
-                }
+
                 $time_slot_switch = !empty(get_post_meta($post_id, 'rbfw_time_slot_switch', true)) ? get_post_meta($post_id, 'rbfw_time_slot_switch', true) : 'on';
                 $available_times = get_post_meta($post_id, 'rdfw_available_time', true) ? maybe_unserialize(get_post_meta($post_id, 'rdfw_available_time', true)) : [];
 
@@ -300,12 +310,16 @@
                 <input type="hidden" name="rbfw_time_slot_switch" id="rbfw_time_slot_switch" value="<?php echo esc_attr($rbfw_enable_time_picker); ?>">
                 <input type="hidden" name="rbfw_bikecarsd_selected_date" id="rbfw_bikecarsd_selected_date">
                 <input type="hidden" name="enable_specific_duration" id="enable_specific_duration" value="<?php echo esc_attr($enable_specific_duration); ?>">
-                <input type="hidden" name="rbfw_start_time" id="rbfw_start_time" value="00:00">
+                <input type="hidden" name="rbfw_start_time" id="rbfw_start_time">
                 <input type="hidden" name="rbfw_service_price" id="rbfw_service_price" value="0">
                 <input type="hidden" name="rbfw_es_service_price" id="rbfw_es_service_price" value="0">
+
+                <input type="hidden" name="rbfw_security_deposit_enable" id="rbfw_security_deposit_enable"  value="<?php echo esc_attr($rbfw_enable_security_deposit); ?>">
+                <input type="hidden" name="rbfw_security_deposit_type" id="rbfw_security_deposit_type"  value="<?php echo esc_attr($rbfw_security_deposit_type); ?>">
+                <input type="hidden" name="rbfw_security_deposit_amount" id="rbfw_security_deposit_amount"  value="<?php echo esc_attr($rbfw_security_deposit_amount); ?>">
+
                 <input type="hidden" name="manage_inventory_as_timely" id="manage_inventory_as_timely" value="<?php echo esc_attr($manage_inventory_as_timely); ?>">
                 <input type="hidden" name="rbfw_rent_type" id="rbfw_rent_type"  value="<?php echo esc_attr($rbfw_rent_type); ?>">
-                <input type="hidden" name="rbfw_regf_info" id="rbfw_regf_info"  value='<?php echo wp_json_encode($rbfw_regf_info); ?>'>
                 <input type="hidden" name="appointment_days" id="appointment_days"  value='<?php echo esc_attr($appointment_days); ?>'>
                 <input type="hidden" name="rbfw_off_days" id="rbfw_off_days"  value='<?php echo esc_attr(rbfw_off_days($post_id)); ?>'>
                 <input type="hidden" name="rbfw_offday_range" id="rbfw_offday_range" class="llll"  value='<?php echo esc_attr(rbfw_off_dates($post_id)); ?>'>

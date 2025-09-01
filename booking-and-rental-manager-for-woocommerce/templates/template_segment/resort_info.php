@@ -17,7 +17,9 @@ if(isset($post_id) && isset($active_tab)){
     $target             = date_create($checkout_date);
     $interval           = date_diff($origin, $target);
     $total_days         = $interval->format('%a');
-    $rbfw_count_extra_day_enable = 'on'; // static fallback, translation not needed for logic
+
+    $rbfw_count_extra_day_enable = $rbfw->get_option_trans('rbfw_count_extra_day_enable', 'rbfw_basic_gen_settings', 'on');
+
 
     if ($rbfw_count_extra_day_enable == 'on' || $total_days==0) {
         $total_days = $total_days + 1;
@@ -48,6 +50,7 @@ if(isset($post_id) && isset($active_tab)){
     </div>
 
     <input type="hidden" name="rbfw_room_price_category" value="<?php echo esc_attr($active_tab); ?>"/>
+    <input type="hidden" name="resort_total_days" id="resort_total_days" value="<?php echo esc_attr($total_days); ?>"/>
 
     <div class="rbfw_resort_rt_price_table_container">
         <table class="rbfw_room_price_table rbfw_resort_rt_price_table">
@@ -63,8 +66,6 @@ if(isset($post_id) && isset($active_tab)){
 
             <?php
             $i = 0;
-
-            setcookie("pricing_applied", "No");
 
             foreach ($rbfw_resort_room_data as $key => $value) {
                 $img_url    = wp_get_attachment_url($value['rbfw_room_image']);
@@ -271,9 +272,9 @@ if(isset($post_id) && isset($active_tab)){
                 <span>
                     <?php echo esc_html__( 'Duration Cost','booking-and-rental-manager-for-woocommerce' ); ?>
                     <span class="rbfw_pricing_applied">
-                        <?php if($_COOKIE['pricing_applied']=='sessional'){ ?>
+                        <?php if(get_transient("pricing_applied")=='sessional'){ ?>
                             (<?php esc_html_e( 'Sessional pricing applied', 'booking-and-rental-manager-for-woocommerce' ); ?>)
-                        <?php }elseif ($_COOKIE['pricing_applied']=='mds'){ ?>
+                        <?php }elseif (get_transient("pricing_applied")=='mds'){ ?>
                             (<?php esc_html_e( 'Multi day pricing saver applied', 'booking-and-rental-manager-for-woocommerce' ); ?>)
                         <?php } ?>
                     </span>
@@ -282,6 +283,12 @@ if(isset($post_id) && isset($active_tab)){
             </li>
             <li class="resource-costing rbfw-cond"><?php echo esc_html__( 'Resource Cost','booking-and-rental-manager-for-woocommerce' ); ?>  <span><span class="price-figure" data-price="0"><?php echo wp_kses_post(wc_price(0)); ?></span></span></li>
             <li class="subtotal"> <?php echo esc_html__( 'Subtotal','booking-and-rental-manager-for-woocommerce' ); ?><span><span class="price-figure"><?php echo wp_kses_post(wc_price(0)); ?></span></span></li>
+
+            <li class="security_deposit" style="display:none;">
+                <?php echo esc_html((!empty(get_post_meta($post_id, 'rbfw_security_deposit_label', true)) ? get_post_meta($post_id, 'rbfw_security_deposit_label', true) : __('Security Deposit','booking-and-rental-manager-for-woocommerce'))); ?>
+                <span></span>
+            </li>
+
             <li class="total"><strong><?php echo esc_html__( 'Total','booking-and-rental-manager-for-woocommerce' ); ?></strong> <span><span class="price-figure"><?php echo wp_kses_post(wc_price(0)); ?></span></span></li>
         </ul>
         <span class="rbfw-loader"><i class="fas fa-spinner fa-spin"></i></span>

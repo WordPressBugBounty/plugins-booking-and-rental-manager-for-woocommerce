@@ -92,6 +92,14 @@
 					'rbfw_ajaxurl' => admin_url( 'admin-ajax.php' ),
 					'nonce'        => wp_create_nonce( 'rbfw_ajax_action' )
 				) );
+                wp_localize_script(
+                    'jquery',
+                    'rbfw_js_variables',
+                    array(
+                        'rbfw_today_booking_enable' => rbfw_get_option('today_booking_enable','rbfw_basic_gen_settings'),
+
+                    )
+                );
 				wp_enqueue_script( 'smartWizard', plugins_url( 'admin/js/jquery.smartWizard.min.js', __DIR__ ), array( 'jquery' ), '6.0.6', false );
 				wp_enqueue_script( 'rbfw-admin-input', plugins_url( 'admin/js/rbfw-admin-input.js', __DIR__ ), array( 'jquery' ), time(), false );
 				do_action( 'rbfw_admin_enqueue_scripts' );
@@ -124,12 +132,12 @@
                 wp_enqueue_script( 'rbfw_script', RBFW_PLUGIN_URL . '/assets/mp_script/rbfw_script.js', array(), time(), true );
 
 
-                    wp_localize_script('rbfw_script', 'rbfw_translation', array(
+                wp_localize_script('rbfw_script', 'rbfw_translation', array(
                         'return_time' => __('Return Time', 'booking-and-rental-manager-for-woocommerce'),
                         'available_quantity_is' => __('Available Quantity is', 'booking-and-rental-manager-for-woocommerce'),
                         'pickup_time' => __('Pickup Time', 'booking-and-rental-manager-for-woocommerce'),
                         'currency' => get_woocommerce_currency_symbol()
-                    ));
+                ));
 
 
 
@@ -169,19 +177,40 @@
 
 
 				if ( rbfw_woo_install_check() == 'Yes' ) {
-					$view_more_feature_btn_text = $rbfw->get_option_trans( 'rbfw_text_view_more_features', 'rbfw_basic_translation_settings', esc_html__( 'Hide More', 'booking-and-rental-manager-for-woocommerce' ) );
-					$hide_more_feature_btn_text = $rbfw->get_option_trans( 'rbfw_text_hide_more_features', 'rbfw_basic_translation_settings', esc_html__( 'Load More', 'booking-and-rental-manager-for-woocommerce' ) );
-					$view_more_offers_btn_text  = $rbfw->get_option_trans( 'rbfw_text_view_more_offers', 'rbfw_basic_translation_settings', esc_html__( 'View More Offers', 'booking-and-rental-manager-for-woocommerce' ) );
-					$hide_more_offers_btn_text  = $rbfw->get_option_trans( 'rbfw_text_hide_more_offers', 'rbfw_basic_translation_settings', esc_html__( 'Hide More Offers', 'booking-and-rental-manager-for-woocommerce' ) );
+					$view_more_feature_btn_text = rbfw_get_label( $rbfw, 'rbfw_text_view_more_features', 'Hide More' );
+					$hide_more_feature_btn_text = rbfw_get_label( $rbfw, 'rbfw_text_hide_more_features', 'Load More' );
+					$view_more_offers_btn_text  = rbfw_get_label( $rbfw, 'rbfw_text_view_more_offers', 'View More Offers' );
+					$hide_more_offers_btn_text  = rbfw_get_label( $rbfw, 'rbfw_text_hide_more_offers', 'Hide More Offers' );
 					$version                    = time(); // Time() function will prevent cache
 					wp_enqueue_script( 'jquery' );
 					wp_enqueue_style( 'dashicons' );
 					wp_enqueue_style( 'rbfw-jquery-ui-style', plugin_dir_url( __DIR__ ) . 'css/jquery-ui.css', array() );
-					wp_localize_script( 'rbfw_custom_script', 'rbfw_ajaxurl', array( 'rbfw_ajaxurl' => admin_url( 'admin-ajax.php' ), 'view_more_feature_btn_text' => $view_more_feature_btn_text, 'hide_more_feature_btn_text' => $hide_more_feature_btn_text, 'view_more_offers_btn_text' => $view_more_offers_btn_text, 'hide_more_offers_btn_text' => $hide_more_offers_btn_text ) );
-					wp_localize_script( 'jquery', 'rbfw_ajax', array(
+
+                    wp_localize_script( 'rbfw_custom_script', 'rbfw_ajaxurl',
+                        array(
+                                'rbfw_ajaxurl' => admin_url( 'admin-ajax.php' ),
+                            'view_more_feature_btn_text' => $view_more_feature_btn_text,
+                            'hide_more_feature_btn_text' => $hide_more_feature_btn_text,
+                            'view_more_offers_btn_text' => $view_more_offers_btn_text,
+                            'hide_more_offers_btn_text' => $hide_more_offers_btn_text ,
+
+                        ));
+
+
+
+                    wp_localize_script(
+                            'jquery',
+                            'rbfw_js_variables',
+                            array(
+                                    'rbfw_today_booking_enable' => rbfw_get_option('today_booking_enable','rbfw_basic_gen_settings'),
+
+                            )
+                    );
+
+                    wp_localize_script( 'jquery', 'rbfw_ajax', array(
 						'rbfw_ajaxurl' => admin_url( 'admin-ajax.php' ),
 						'nonce'        => wp_create_nonce( 'rbfw_ajax_action' )
-					) );
+                    ));
 					//font awesome
 					// wp_enqueue_style( 'fontawesome.v6', RBFW_PLUGIN_URL . '/css/all.min.css' );
 					// wp_enqueue_style('fontawesome.v6',  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css');

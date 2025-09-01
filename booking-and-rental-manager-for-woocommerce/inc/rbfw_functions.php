@@ -436,8 +436,8 @@
 		}
 		global $rbfw;
 		$rbfw_related_post_arr = get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ? maybe_unserialize( get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ) : array();
-		$hourly_rate_label     = $rbfw->get_option_trans( 'rbfw_text_hourly_rate', 'rbfw_basic_translation_settings', esc_html__( 'Hourly rate', 'booking-and-rental-manager-for-woocommerce' ) );
-		$prices_start_at       = $rbfw->get_option_trans( 'rbfw_text_prices_start_at', 'rbfw_basic_translation_settings', esc_html__( 'Prices start at', 'booking-and-rental-manager-for-woocommerce' ) );
+		$hourly_rate_label     = rbfw_get_label( $rbfw, 'rbfw_text_hourly_rate', 'Hourly rate' );
+		$prices_start_at       = rbfw_get_label( $rbfw, 'rbfw_text_prices_start_at', 'Prices start at' );
 		if ( isset( $rbfw_related_post_arr ) && ! empty( $rbfw_related_post_arr ) ) {
 			?>
             <h3 class="rbfw-related-product-heading">
@@ -454,15 +454,13 @@
 					}
 					$thumb_url               = ! empty( get_the_post_thumbnail_url( $rbfw_related_post_id, 'full' ) ) ? get_the_post_thumbnail_url( $rbfw_related_post_id, 'full' ) : $gallery_image;
 					$title                   = get_the_title( $rbfw_related_post_id );
-					$hourly_rate_label       = $rbfw->get_option_trans( 'rbfw_text_hourly_rate', 'rbfw_basic_translation_settings', esc_html__( 'Hourly rate', 'booking-and-rental-manager-for-woocommerce' ) );
-					$daily_rate_label        = $rbfw->get_option_trans( 'rbfw_text_daily_rate', 'rbfw_basic_translation_settings', esc_html__( 'Daily rate', 'booking-and-rental-manager-for-woocommerce' ) );
+					$daily_rate_label        = rbfw_get_label( $rbfw, 'rbfw_text_daily_rate', 'Daily rate' );
 					$rbfw_enable_hourly_rate = get_post_meta( $rbfw_related_post_id, 'rbfw_enable_hourly_rate', true ) ? get_post_meta( $rbfw_related_post_id, 'rbfw_enable_hourly_rate', true ) : 'no';
 					if ( $rbfw_enable_hourly_rate == 'no' ) {
 						$the_price_label = $daily_rate_label;
 					} else {
 						$the_price_label = $hourly_rate_label;
 					}
-					$prices_start_at = $rbfw->get_option_trans( 'rbfw_text_prices_start_at', 'rbfw_basic_translation_settings', esc_html__( 'Prices start at', 'booking-and-rental-manager-for-woocommerce' ) );
 					$rbfw_rent_type  = get_post_meta( $rbfw_related_post_id, 'rbfw_item_type', true );
 					if ( $rbfw_enable_hourly_rate == 'yes' ) {
 						$price     = get_post_meta( $rbfw_related_post_id, 'rbfw_hourly_rate', true ) ? get_post_meta( $rbfw_related_post_id, 'rbfw_hourly_rate', true ) : 0;
@@ -1507,8 +1505,8 @@
 		}
 		global $rbfw;
 		$rbfw_related_post_arr = get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ? maybe_unserialize( get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ) : array();
-		$hourly_rate_label     = $rbfw->get_option_trans( 'rbfw_text_hourly_rate', 'rbfw_basic_translation_settings', esc_html__( 'Hourly rate', 'booking-and-rental-manager-for-woocommerce' ) );
-		$prices_start_at       = $rbfw->get_option_trans( 'rbfw_text_prices_start_at', 'rbfw_basic_translation_settings', esc_html__( 'Prices start at', 'booking-and-rental-manager-for-woocommerce' ) );
+		$hourly_rate_label     = rbfw_get_label( $rbfw, 'rbfw_text_hourly_rate', 'Hourly rate' );
+		$prices_start_at       = rbfw_get_label( $rbfw, 'rbfw_text_prices_start_at', 'Prices start at' );
 		if ( ! empty( $rbfw_related_post_arr ) ) {
 			echo '<div class="owl-carousel owl-theme t_carousel">';
 			foreach ( $rbfw_related_post_arr as $rbfw_related_post_id ) {
@@ -1731,9 +1729,9 @@
 		}
 		global $rbfw;
 		$rbfw_related_post_arr = get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ? maybe_unserialize( get_post_meta( $post_id, 'rbfw_releted_rbfw', true ) ) : array();
-		$hourly_rate_label     = $rbfw->get_option_trans( 'rbfw_text_hourly_rate', 'rbfw_basic_translation_settings', esc_html__( 'Hourly rate', 'booking-and-rental-manager-for-woocommerce' ) );
-		$prices_start_at       = $rbfw->get_option_trans( 'rbfw_text_prices_start_at', 'rbfw_basic_translation_settings', esc_html__( 'Prices start at', 'booking-and-rental-manager-for-woocommerce' ) );
-		$reviews_label         = $rbfw->get_option_trans( 'rbfw_text_reviews', 'rbfw_basic_translation_settings', esc_html__( 'Reviews', 'booking-and-rental-manager-for-woocommerce' ) );
+		$hourly_rate_label     = rbfw_get_label( $rbfw, 'rbfw_text_hourly_rate', 'Hourly rate' );
+		$prices_start_at       = rbfw_get_label( $rbfw, 'rbfw_text_prices_start_at', 'Prices start at' );
+		$reviews_label         = rbfw_get_label( $rbfw, 'rbfw_text_reviews', 'Reviews' ) ;
 		if ( ! empty( $rbfw_related_post_arr ) ) {
 			echo '<div class="owl-carousel owl-theme t_carousel">';
 			foreach ( $rbfw_related_post_arr as $rbfw_related_post_id ) {
@@ -1746,15 +1744,14 @@
 				$rbfw_rent_type          = get_post_meta( $rbfw_related_post_id, 'rbfw_item_type', true );
 				$thumb_url               = ! empty( get_the_post_thumbnail_url( $rbfw_related_post_id, 'full' ) ) ? get_the_post_thumbnail_url( $rbfw_related_post_id, 'full' ) : $gallery_image;
 				$title                   = get_the_title( $rbfw_related_post_id );
-				$hourly_rate_label       = $rbfw->get_option_trans( 'rbfw_text_hourly_rate', 'rbfw_basic_translation_settings', esc_html__( 'Hourly rate', 'booking-and-rental-manager-for-woocommerce' ) );
-				$daily_rate_label        = $rbfw->get_option_trans( 'rbfw_text_daily_rate', 'rbfw_basic_translation_settings', esc_html__( 'Daily rate', 'booking-and-rental-manager-for-woocommerce' ) );
+				$daily_rate_label        = rbfw_get_label( $rbfw, 'rbfw_text_daily_rate', 'Daily rate' ) ;
 				$rbfw_enable_hourly_rate = get_post_meta( $rbfw_related_post_id, 'rbfw_enable_hourly_rate', true ) ? get_post_meta( $rbfw_related_post_id, 'rbfw_enable_hourly_rate', true ) : 'no';
 				if ( $rbfw_enable_hourly_rate == 'no' ) {
 					$the_price_label = $daily_rate_label;
 				} else {
 					$the_price_label = $hourly_rate_label;
 				}
-				$prices_start_at = $rbfw->get_option_trans( 'rbfw_text_prices_start_at', 'rbfw_basic_translation_settings', esc_html__( 'Prices start at', 'booking-and-rental-manager-for-woocommerce' ) );
+
 				$rbfw_rent_type  = get_post_meta( $rbfw_related_post_id, 'rbfw_item_type', true );
 				if ( $rbfw_enable_hourly_rate == 'yes' ) {
 					$price     = get_post_meta( $rbfw_related_post_id, 'rbfw_hourly_rate', true ) ? get_post_meta( $rbfw_related_post_id, 'rbfw_hourly_rate', true ) : 0;
@@ -2614,7 +2611,7 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
         if ($hours > 0)       $output[] = "$hours hour" . ($hours > 1 ? 's' : '');
 
 
-        return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>$_COOKIE['pricing_applied']];
+        return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>get_transient("pricing_applied")];
 
     }
 
@@ -2650,7 +2647,7 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
         if ($daysWeeks > 0)        $output[] = "$daysWeeks day" . ($daysWeeks > 1 ? 's' : '');
         if ($hours > 0)       $output[] = "$hours hour" . ($hours > 1 ? 's' : '');
 
-        return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>$_COOKIE['pricing_applied']];
+        return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>get_transient("pricing_applied")];
     }
 
 
@@ -2664,7 +2661,7 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
     $actual_days = $total_days;
     $hours = $diff->h + ($diff->i / 60);
 
-    setcookie("pricing_applied", "No");
+
 
     if ($rbfw_enable_time_slot === 'off') {
         if ($rbfw->get_option_trans('rbfw_count_extra_day_enable', 'rbfw_basic_gen_settings', 'on') === 'on' || $total_days === 0) {
@@ -2695,7 +2692,7 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
         );
     }
 
-    return ['duration_price' => $duration_price, 'total_days' => $total_days, 'actual_days' => $actual_days, 'hours' => $hours,'pricing_applied'=>isset($_COOKIE['pricing_applied'])?$_COOKIE['pricing_applied']:''];
+    return ['duration_price' => $duration_price, 'total_days' => $total_days, 'actual_days' => $actual_days, 'hours' => $hours,'pricing_applied'=>get_transient("pricing_applied")];
 }
 
 
@@ -2828,7 +2825,9 @@ function rbfw_get_hourly_rate($post_id, $day, $hourly_rate, $seasonal_prices, $d
     }
     $enabled = get_post_meta($post_id, "rbfw_enable_{$day}_day", true);
     $custom_rate = get_post_meta($post_id, "rbfw_{$day}_hourly_rate", true);
-    return $enabled === 'yes' ? ($custom_rate * $hours) : ($hourly_rate * $hours);
+    return $enabled === 'yes'
+        ? ((float) $custom_rate * (float) $hours)
+        : ((float) $hourly_rate * (float) $hours);
 }
 
 function rbfw_get_day_rate($post_id, $day, $daily_rate, $seasonal_prices, $date, $hours = 0, $enable_daily = 'yes') {
@@ -3066,7 +3065,9 @@ function rbfw_md_duration_price_calculation_old( $post_id = 0, $pickup_datetime 
                 $daily_rate = $rbfw_sp_price['rbfw_sp_price_h'] ?: $daily_rate;
                 $hourly_rate = $rbfw_sp_price['rbfw_sp_price_d'] ?: $hourly_rate;
 
-                setcookie("pricing_applied", "sessional");
+               // setcookie("pricing_applied", "sessional");
+
+                set_transient("pricing_applied", "sessional", 3600);
 
 				if ( $hours ) {
 					return $daily_rate * $hours;
@@ -3092,7 +3093,9 @@ function check_seasonal_price_resort( $Book_date, $rbfw_sp_prices, $room_type = 
                 if ( in_array( $Book_date, $sp_dates_array ) ) {
                     foreach ($rbfw_sp_price['room_price'] as $room_price){
                         if($room_type == $room_price['room_type']){
-                            setcookie("pricing_applied", "sessional");
+
+                            set_transient("pricing_applied", "sessional", 3600);
+
                             if($active_tab=='daylong'){
                                 return $room_price['day_long_price'];
                             }else{
@@ -3114,7 +3117,12 @@ function check_seasonal_price_resort_mds( $day_number, $rbfw_sp_prices, $room_ty
             if ($day_number >= $rbfw_sp_price['start_day']) {
                 foreach ($rbfw_sp_price['room_price'] as $key=>$room_price){
                     if($room_type == $room_price['room_type']){
-                        setcookie("pricing_applied", "mds");
+
+
+
+                        set_transient("pricing_applied", "mds", 3600);
+
+
                         if($active_tab=='daylong'){
                             $price = $room_price['day_long_price'];
                         }else{
@@ -3133,10 +3141,10 @@ function check_multi_day_price_saver_in_md( $total_days, $rbfw_md_data_mds) {
     $price = [];
     foreach ($rbfw_md_data_mds as $single) {
         if ($total_days >= $single['rbfw_start_day']) {
-            setcookie("pricing_applied", "mds");
-            return array($single['rbfw_daily_price'] , $single['rbfw_hourly_price']);
-        } else {
-            break;
+
+            set_transient("pricing_applied", "mds", 3600);
+
+            $price =  array($single['rbfw_daily_price'] , $single['rbfw_hourly_price']);
         }
     }
     return $price;
@@ -3518,4 +3526,168 @@ function rbfw_ticket_feature_info(){
 	<div class="rbfw-bikecarsd-calendar-header-feature"><i class="fas fa-bolt"></i> <?php rbfw_string('rbfw_text_instant_confirmation',__('Instant confirmation','booking-and-rental-manager-for-woocommerce')); ?></div>
 </div>
 <?php
+}
+
+/**
+ * RBFW Reset Orders - AJAX Handler
+ * Handles the cancellation of all rental orders for a specific item
+ */
+add_action( 'wp_ajax_rbfw_cancel_all_orders', 'rbfw_cancel_all_orders_callback' );
+function rbfw_cancel_all_orders_callback() {
+	// Verify nonce for security
+	if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'rbfw_cancel_orders_nonce' ) ) {
+		wp_send_json_error( array( 'message' => __( 'Security check failed.', 'booking-and-rental-manager-for-woocommerce' ) ) );
+	}
+
+	// Check user capabilities
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You do not have permission to perform this action.', 'booking-and-rental-manager-for-woocommerce' ) ) );
+	}
+
+	$item_id = isset( $_POST['item_id'] ) ? intval( $_POST['item_id'] ) : 0;
+
+	if ( ! $item_id ) {
+		wp_send_json_error( array( 'message' => __( 'Invalid item ID.', 'booking-and-rental-manager-for-woocommerce' ) ) );
+	}
+
+	// Get all orders for this rental item
+	$args = array(
+		'post_type' => 'rbfw_order',
+		'posts_per_page' => -1,
+		'meta_query' => array(
+			array(
+				'key' => 'rbfw_id',
+				'value' => $item_id,
+				'compare' => '='
+			)
+		)
+	);
+
+	$orders = get_posts( $args );
+	$cancelled_count = 0;
+	$error_count = 0;
+
+	foreach ( $orders as $order ) {
+		$rbfw_order_id = $order->ID;
+		$wc_order_id = get_post_meta( $rbfw_order_id, 'rbfw_order_id', true );
+
+		if ( $wc_order_id ) {
+			$wc_order = wc_get_order( $wc_order_id );
+
+			if ( $wc_order && ! in_array( $wc_order->get_status(), array( 'cancelled', 'refunded', 'failed' ) ) ) {
+				try {
+					// Cancel the WooCommerce order
+					$wc_order->update_status( 'cancelled', __( 'Order cancelled via rental reset function.', 'booking-and-rental-manager-for-woocommerce' ) );
+
+					// Update the rental order status
+					update_post_meta( $rbfw_order_id, 'rbfw_order_status', 'cancelled' );
+
+					// Restore inventory if needed
+					rbfw_restore_inventory_on_cancel( $rbfw_order_id );
+
+					$cancelled_count++;
+				} catch ( Exception $e ) {
+					$error_count++;
+					error_log( 'RBFW Order Cancellation Error: ' . $e->getMessage() );
+				}
+			}
+		}
+	}
+
+	if ( $cancelled_count > 0 ) {
+		$message = sprintf(
+			_n(
+				'Successfully cancelled %d order.',
+				'Successfully cancelled %d orders.',
+				$cancelled_count,
+				'booking-and-rental-manager-for-woocommerce'
+			),
+			$cancelled_count
+		);
+
+		if ( $error_count > 0 ) {
+			$message .= ' ' . sprintf(
+				_n(
+					'%d order could not be cancelled.',
+					'%d orders could not be cancelled.',
+					$error_count,
+					'booking-and-rental-manager-for-woocommerce'
+				),
+				$error_count
+			);
+		}
+
+		wp_send_json_success( array( 'message' => $message ) );
+	} else {
+		wp_send_json_error( array( 'message' => __( 'No orders found to cancel or all orders are already cancelled.', 'booking-and-rental-manager-for-woocommerce' ) ) );
+	}
+}
+
+/**
+ * Restore inventory when an order is cancelled
+ * 
+ * @param int $rbfw_order_id The RBFW order ID
+ */
+function rbfw_restore_inventory_on_cancel( $rbfw_order_id ) {
+	// Get order ticket information
+	$ticket_infos = get_post_meta( $rbfw_order_id, 'rbfw_ticket_info', true );
+	$ticket_info_array = maybe_unserialize( $ticket_infos );
+
+	if ( ! empty( $ticket_info_array ) && is_array( $ticket_info_array ) ) {
+		foreach ( $ticket_info_array as $ticket_info ) {
+			$rbfw_id = isset( $ticket_info['rbfw_id'] ) ? $ticket_info['rbfw_id'] : 0;
+			$start_date = isset( $ticket_info['rbfw_start_date'] ) ? $ticket_info['rbfw_start_date'] : '';
+			$end_date = isset( $ticket_info['rbfw_end_date'] ) ? $ticket_info['rbfw_end_date'] : '';
+			$item_quantity = isset( $ticket_info['rbfw_item_quantity'] ) ? intval( $ticket_info['rbfw_item_quantity'] ) : 1;
+
+			if ( $rbfw_id && $start_date && $end_date ) {
+				// Restore inventory for the cancelled booking
+				// This hook allows other plugins/themes to handle inventory restoration
+				do_action( 'rbfw_restore_inventory_on_cancel', $rbfw_id, $start_date, $end_date, $item_quantity );
+			}
+		}
+	}
+}
+
+/**
+ * Enqueue admin assets for RBFW reset orders functionality
+ */
+add_action( 'admin_enqueue_scripts', 'rbfw_enqueue_reset_orders_assets' );
+function rbfw_enqueue_reset_orders_assets( $hook ) {
+	// Only load on rbfw_item edit pages
+	global $post_type;
+	if ( $post_type !== 'rbfw_item' || ( $hook !== 'post.php' && $hook !== 'post-new.php' ) ) {
+		return;
+	}
+
+	// Enqueue CSS
+	wp_enqueue_style(
+		'rbfw-reset-orders-css',
+		plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin/css/rbfw-reset-orders.css',
+		array(),
+		'1.0.0'
+	);
+
+	// Enqueue JavaScript
+	wp_enqueue_script(
+		'rbfw-reset-orders-js',
+		plugin_dir_url( dirname( __FILE__ ) ) . 'assets/admin/js/rbfw-reset-orders.js',
+		array( 'jquery' ),
+		'1.0.0',
+		true
+	);
+
+	// Localize script with data
+	wp_localize_script( 'rbfw-reset-orders-js', 'rbfw_reset_orders', array(
+		'ajax_url' => admin_url( 'admin-ajax.php' ),
+		'nonce' => wp_create_nonce( 'rbfw_cancel_orders_nonce' ),
+		'messages' => array(
+			'confirm' => __( 'Are you sure you want to cancel all rental orders for this item? This action cannot be undone.', 'booking-and-rental-manager-for-woocommerce' ),
+			'processing' => __( 'Processing...', 'booking-and-rental-manager-for-woocommerce' ),
+			'button_text' => __( 'Reset', 'booking-and-rental-manager-for-woocommerce' ),
+			'ajax_error' => __( 'An error occurred. Please try again.', 'booking-and-rental-manager-for-woocommerce' ),
+			'invalid_item' => __( 'Invalid item ID.', 'booking-and-rental-manager-for-woocommerce' ),
+			'unknown_error' => __( 'An unknown error occurred.', 'booking-and-rental-manager-for-woocommerce' )
+		)
+	) );
 }
