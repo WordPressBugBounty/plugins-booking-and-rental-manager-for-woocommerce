@@ -194,6 +194,31 @@
 				<?php
 			}
 
+            public function stock_manage_return_date( $post_id ) {
+
+                $total_booked = 0;
+
+                $stock_manage_on_return_date = get_post_meta( $post_id, 'stock_manage_on_return_date', true ) ? get_post_meta( $post_id, 'stock_manage_on_return_date', true ) : 'no';
+
+                ?>
+                    <section>
+                        <div>
+                            <label for="">Inventory Management by Return Date</label>
+                            <p>(Items become available for booking again on the scheduled return date.)</p>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" name="stock_manage_on_return_date" value="<?php echo esc_attr( $stock_manage_on_return_date ); ?>" <?php echo esc_attr( ( $stock_manage_on_return_date == 'yes' ) ? 'checked' : '' ); ?>>
+                            <span class="slider round"></span>
+                        </label>
+                       <!-- <select class="formControl max_300" name="stock_manage_on_return_date">
+                            <option <?php /*echo ($stock_manage_on_return_date=='Yes')?'selected':'' */?> value="Yes">Yes</option>
+                            <option <?php /*echo ($stock_manage_on_return_date=='No')?'selected':'' */?> value="No">No</option>
+                        </select>-->
+                    </section>
+                <?php
+
+            }
+
 			public function quantity_box_toggle( $post_id ) {
 				$rbfw_enable_md_type_item_qty = get_post_meta( $post_id, 'rbfw_enable_md_type_item_qty', true ) ? get_post_meta( $post_id, 'rbfw_enable_md_type_item_qty', true ) : 'no';
 				?>
@@ -235,6 +260,7 @@
 					<?php $this->section_header(); ?>
 					<?php $this->panel_header( 'Inventory Settings', 'Inventory Settings' ); ?>
 					<?php $this->stock_settings( $post_id ); ?>
+					<?php $this->stock_manage_return_date( $post_id ); ?>
 					<?php $this->quantity_box_toggle( $post_id ); ?>
 					<?php $this->variation_table_switch_on_off( $post_id ); ?>
 					<?php $this->variation_settings( $post_id ); ?>
@@ -254,6 +280,16 @@
                         }
                     });
                     jQuery('input[name=rbfw_enable_md_type_item_qty]').click(function () {
+                        var status = jQuery(this).val();
+                        if (status == 'yes') {
+                            jQuery(this).val('no');
+                        }
+                        if (status == 'no') {
+                            jQuery(this).val('yes');
+                        }
+                    });
+
+                    jQuery('input[name=stock_manage_on_return_date]').click(function () {
                         var status = jQuery(this).val();
                         if (status == 'yes') {
                             jQuery(this).val('no');
@@ -361,6 +397,7 @@
 				if ( get_post_type( $post_id ) == 'rbfw_item' ) {
 					$rbfw_enable_variations   = isset( $_POST['rbfw_enable_variations'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_enable_variations'] ) ) : 'no';
 					$rbfw_item_stock_quantity = isset( $_POST['rbfw_item_stock_quantity'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_item_stock_quantity'] ) ) : '';
+					$stock_manage_on_return_date = isset( $_POST['stock_manage_on_return_date'] ) ? sanitize_text_field( wp_unslash( $_POST['stock_manage_on_return_date'] ) ) : '';
 					$rbfw_enable_md_type_item_qty = isset( $_POST['rbfw_enable_md_type_item_qty'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_enable_md_type_item_qty'] ) ) : 'no';
 					$rbfw_variations_data = isset( $_POST['rbfw_variations_data'] ) ? RBFW_Function::data_sanitize( $_POST['rbfw_variations_data'] ) : [];
 
@@ -369,6 +406,7 @@
 					update_post_meta( $post_id, 'rbfw_enable_md_type_item_qty', $rbfw_enable_md_type_item_qty );
 					update_post_meta( $post_id, 'rbfw_enable_variations', $rbfw_enable_variations );
 					update_post_meta( $post_id, 'rbfw_item_stock_quantity', $rbfw_item_stock_quantity );
+					update_post_meta( $post_id, 'stock_manage_on_return_date', $stock_manage_on_return_date );
 					update_post_meta( $post_id, 'rbfw_variations_data', $rbfw_variations_data );
 				}
 			}

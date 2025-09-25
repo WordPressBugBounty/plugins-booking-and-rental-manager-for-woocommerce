@@ -118,9 +118,6 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $rbfw_resort_ticket_info                    = $rbfw_resort->rbfw_resort_ticket_info( $rbfw_id, $rbfw_checkin_datetime, $rbfw_checkout_datetime, $rbfw_room_price_category, $rbfw_room_info, $rbfw_service_info, $rbfw_regf_info, $rbfw_room_price );
 
 
-                echo $rbfw_room_total_price;exit;
-
-
                 $base_price                                 = $rbfw_room_total_price;
                 $total_price                                = apply_filters( 'rbfw_cart_base_price', $base_price );
                 $security_deposit                           = rbfw_security_deposit( $rbfw_id, $total_price );
@@ -288,11 +285,20 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $cart_item_data['security_deposit_desc']          = $security_deposit['security_deposit_desc'];
 
             } else {
-
+                global $rbfw;
                 $start_date                = isset( $sd_input_data_sabitized['rbfw_pickup_start_date'] ) ? $sd_input_data_sabitized['rbfw_pickup_start_date'] : '';
-                $end_date                  = isset( $sd_input_data_sabitized['rbfw_pickup_end_date'] ) ? $sd_input_data_sabitized['rbfw_pickup_end_date'] : '';
+
+                $rbfw_count_extra_day_enable = $rbfw->get_option_trans('rbfw_count_extra_day_enable', 'rbfw_basic_gen_settings', 'on');
+                $rbfw_enable_time_picker  = get_post_meta( $rbfw_id, 'rbfw_enable_time_picker', true ) ? get_post_meta( $rbfw_id, 'rbfw_enable_time_picker', true ) : '';
+
+                if($rbfw_count_extra_day_enable=='on' && $rbfw_enable_time_picker=='no') {
+                    $end_date = isset($sd_input_data_sabitized['rbfw_pickup_end_date']) ? $sd_input_data_sabitized['rbfw_pickup_end_date'] : '';
+                    $date = new DateTime($end_date);
+                    $date->modify("+1 day");
+                    $end_date = $date->format("Y-m-d");
+                }
                 $start_time                = isset( $sd_input_data_sabitized['rbfw_pickup_start_time'] ) ? $sd_input_data_sabitized['rbfw_pickup_start_time'] : '';
-                $end_time                  = isset( $sd_input_data_sabitized['rbfw_pickup_end_time'] ) ? $sd_input_data_sabitized['rbfw_pickup_end_time'] : rbfw_end_time();
+                $end_time                  = isset( $sd_input_data_sabitized['rbfw_pickup_end_time'] ) ? $sd_input_data_sabitized['rbfw_pickup_end_time'] : '';
 
 
                 $pickup_datetime           = gmdate( 'Y-m-d H:i', strtotime( $start_date . ' ' . $start_time ) );

@@ -85,7 +85,8 @@ jQuery(document).on('click','.rbfw_bikecarsd_time:not(.rbfw_bikecarsd_time.disab
 
 
 
-function rbfw_off_day_dates(date,type='',today_enable='no'){
+function rbfw_off_day_dates(date,type='',today_enable='no',dropoff=null){
+
 
 
     var curr_date = ("0" + (date.getDate())).slice(-2);
@@ -131,14 +132,50 @@ function rbfw_off_day_dates(date,type='',today_enable='no'){
             if(rbfw_rent_type == 'bike_car_md'){
                 if(jQuery('#rbfw_month_wise_inventory').val()){
                     const  day_wise_inventory = JSON.parse(jQuery('#rbfw_month_wise_inventory').val());
+
                     if(day_wise_inventory[date_in]==0){
                         return [false, "notav", 'Sold Out'];
                     }
+
+
+                    if(dropoff){
+                        // Additional check for return date selection
+                        // If pickup date is already selected and we're selecting return date
+                        let pickup_date = jQuery('input[name="rbfw_pickup_start_date"]').val();
+                        if(pickup_date && pickup_date !== '') {
+                            // Check if this is for return date calendar by checking if current date is after pickup date
+                            let pickup_date_obj = new Date(pickup_date);
+                            if(date > pickup_date_obj) {
+                                // Check for first sold-out date in the sequence from pickup to current date
+                                let current_check_date = new Date(pickup_date_obj);
+                                current_check_date.setDate(current_check_date.getDate() + 1); // Start from day after pickup
+
+                                while(current_check_date <= date) {
+                                    let check_curr_date = ("0" + current_check_date.getDate()).slice(-2);
+                                    let check_curr_month = ("0" + (current_check_date.getMonth() + 1)).slice(-2);
+                                    let check_curr_year = current_check_date.getFullYear();
+                                    let check_date_in = check_curr_date+"-"+check_curr_month+"-"+check_curr_year;
+
+                                    // If we find a sold-out date in the sequence, disable all subsequent dates
+                                    if(day_wise_inventory[check_date_in] == 0) {
+                                        return [false, "notav", ''];
+                                    }
+
+                                    current_check_date.setDate(current_check_date.getDate() + 1);
+                                }
+                            }
+                        }
+                    }
+
+
+
+
+
                 }
 
             }
-            
-            
+
+
             return [true, "av", ""];
         }else{
             return false;
@@ -146,101 +183,235 @@ function rbfw_off_day_dates(date,type='',today_enable='no'){
     }
 }
 
-function particular_time_date_dependent_ajax(post_id,date_ymd,type='',rbfw_enable_time_slot='',selector){
 
-    jQuery.ajax({
-        type: 'POST',
-        dataType:'json',
-        url: rbfw_ajax_front.rbfw_ajaxurl,
-        data: {
-            'action'  : 'particular_time_date_dependent',
-            'post_id': post_id,
-            'selected_date': date_ymd,
-            'type': type,
-            'selector': selector,
-            'nonce' : rbfw_ajax_front.nonce_particular_time_date_dependent
-        },
-        beforeSend: function() {
-            jQuery('.rbfw_bikecarsd_price_summary').addClass('old');
-            jQuery('.rbfw_bikecarsd_pricing_table_wrap').addClass('rbfw_loader_in');
-            jQuery('.rbfw_bikecarsd_pricing_table_wrap').append('<i class="fas fa-spinner fa-spin"></i>');
-        },
-        success: function (response) {
-            jQuery('.rbfw_bikecarsd_pricing_table_wrap').removeClass('rbfw_loader_in');
-            jQuery('.rbfw_bikecarsd_pricing_table_wrap i.fa-spinner').remove();
+function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_particular,is_calendar=null) {
 
-            if(type=='sd'){
 
-                let quantity_options = '';
 
-                jQuery.each(response[0], function(i, item) {
-                        quantity_options += `
-                            <a data-time="${item[1]}" class="rbfw_bikecarsd_time">
-                                <span class="rbfw_bikecarsd_time_span">${item[1]}</span>
-                            </a>
-                        `;
-                });
-                jQuery(response[1]).html(quantity_options);
+    var scheduleJson = JSON.parse(schedule);
+    // Safely parse and normalize rdfw_available_time into an array
+    var rdfw_available_timeJson = [];
+    try {
+        var parsedAvailable = (typeof rdfw_available_time === 'string') ? JSON.parse(rdfw_available_time) : rdfw_available_time;
+        if (Array.isArray(parsedAvailable)) {
+            rdfw_available_timeJson = parsedAvailable;
+        } else if (parsedAvailable && typeof parsedAvailable === 'object') {
+            rdfw_available_timeJson = Object.values(parsedAvailable);
+        } else {
+            rdfw_available_timeJson = [];
+        }
+    } catch (e) {
+        rdfw_available_timeJson = [];
+    }
+    let  sapecific_date_time = false;
+    let  time_enable = false;
+    let past_time = ''
 
-            } else {
-                if (response[1] == ".rbfw-select.rbfw-time-price.dropoff_time") {
-                    var quantity_options = "<option value=''>" + rbfw_translation.return_time + "</option>";
-                } else {
-                    var quantity_options = "<option value=''>" + rbfw_translation.pickup_time + "</option>";
+    const selectedDate = new Date(givenDate);
+
+    const timeSelect = document.getElementById(pickup_time_particular);
+
+
+    if(is_calendar=='calendar'){
+        timeSelect.innerHTML = '';
+    }else{
+        timeSelect.innerHTML = '<option value="">'+ rbfw_translation.pickup_time +'</option>'; // reset options
+    }
+
+
+    // loop through data
+    Object.values(scheduleJson).forEach(item => {
+        const start = new Date(item.start_date);
+        const end = new Date(item.end_date);
+
+            // check if selected date is within range
+        if (selectedDate >= start && selectedDate <= end) {
+            item.available_time.forEach(timeObj => {
+                if (timeObj.status === "enabled") {
+
+                    let now = new Date();
+                    let currentDateStr = new Date(rbfw_js_variables.currentDateTime.replace(' ', 'T'));
+                    let selectedDateStr = selectedDate.toISOString().split("T")[0];
+
+                    if (selectedDateStr === currentDateStr) {
+                        // Parse available_time into a Date object for comparison
+                        let [hours, minutes] = timeObj.time.split(":").map(Number);
+                        let timeDate = new Date();
+                        timeDate.setHours(hours, minutes, 0, 0);
+
+                        if (timeDate <= now) {
+                            time_enable = true;
+                            past_time = 'Past time';
+                        }else{
+                            time_enable = false;
+                            past_time = '';
+                        }
+                    }
+
+
+                    let myTime = timeObj.time;
+
+                    // Split into hours and minutes
+                    let [hours, minutes] = myTime.split(":").map(Number);
+
+                    // Create a JS Date object for formatting
+                    let date = new Date();
+                    date.setHours(hours);
+                    date.setMinutes(minutes);
+
+                    sapecific_date_time = true;
+
+                    if(is_calendar=='calendar'){
+
+                        const a = document.createElement("a");
+                        a.className = "rbfw_bikecarsd_time";
+                        a.setAttribute("data-time", timeObj.time);
+
+                        const span = document.createElement("span");
+                        span.className = "rbfw_bikecarsd_time_span";
+                        span.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;;
+
+                        a.appendChild(span);
+                        timeSelect.appendChild(a);
+
+                    }else{
+                        const option = document.createElement("option");
+                        option.value = timeObj.time;
+                        option.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;
+                        option.disabled = time_enable;
+                        option.title = past_time;
+                        timeSelect.appendChild(option);
+                    }
+
+
+
                 }
-
-                jQuery.each(response[0], function(i, item) {
-                    quantity_options += "<option "+ item[0] +" value="+i+">"+item[1]+"</option>";
-                });
-                jQuery(response[1]).html(quantity_options);
-            }
-
-
-
-
-
-
-            let pickup_date = jQuery('#hidden_pickup_date').val();
-            let dropoff_date = jQuery('#hidden_dropoff_date').val();
-
-            console.log('pickup_date',pickup_date)
-            console.log('dropoff_date',dropoff_date)
-
-
-            if (pickup_date == dropoff_date) {
-                let selected_time = jQuery('.pickup_time').val();
-                selected_time = new Date (pickup_date +' '+ selected_time);
-                jQuery(".dropoff_time").val("").trigger("change");
-
-                jQuery("#dropoff_time option").each(function() {
-                    var thisOptionValue = jQuery(this).val();
-                    thisOptionValue = new Date(pickup_date +' '+ thisOptionValue);
-
-
-                    if (thisOptionValue <= selected_time) {
-                        jQuery(this).attr('disabled', true);
-                    } else {
-                        jQuery(this).attr('disabled', false);
-                    }
-                });
-
-            } else {
-                jQuery("#dropoff_time option").each(function() {
-                    var thisOptionValue = jQuery(this).val();
-                    if (thisOptionValue != '') {
-                        jQuery(this).attr('disabled', false);
-                    } else {
-                        jQuery(this).attr('disabled', true);
-                    }
-                });
-            }
-
-
-
+            });
         }
     });
+
+    if(sapecific_date_time==false && Array.isArray(rdfw_available_timeJson)){
+        rdfw_available_timeJson.forEach(timeObj => {
+            if (timeObj.status === "enabled") {
+
+                let now = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));// new Date();
+                let currentDateStr = rbfw_js_variables.currentDate;
+                let selectedDateStr = selectedDate.toISOString().split("T")[0];
+
+                console.log('currentDateStr',currentDateStr);
+                console.log('selectedDateStr',selectedDateStr);
+                console.log(rbfw_js_variables.currentDateTime);
+
+                if (selectedDateStr === currentDateStr) {
+                    // Parse available_time into a Date object for comparison
+                    let [hours, minutes] = timeObj.time.split(":").map(Number);
+                    let timeDate = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));
+                    timeDate.setHours(hours, minutes, 0, 0);
+
+                    if (timeDate <= now) {
+                        time_enable = true;
+                        past_time = 'Past time';
+                    }else{
+                        time_enable = false;
+                        past_time = '';
+                    }
+                }
+
+
+                let myTime = timeObj.time;  // 2:30 PM
+
+                // Split into hours and minutes
+                let [hours, minutes] = myTime.split(":").map(Number);
+
+                // Create a JS Date object for formatting
+                let date = new Date();
+                date.setHours(hours);
+                date.setMinutes(minutes);
+                sapecific_date_time = true;
+
+                if(is_calendar=='calendar'){
+
+                    const a = document.createElement("a");
+                    a.className = "rbfw_bikecarsd_time";
+                    a.setAttribute("data-time", timeObj.time);
+
+                    const span = document.createElement("span");
+                    span.className = "rbfw_bikecarsd_time_span";
+                    span.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;;
+
+                    a.appendChild(span);
+                    timeSelect.appendChild(a);
+
+
+                }else{
+                    const option = document.createElement("option");
+                    option.value = timeObj.time;
+                    option.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;
+                    option.disabled = time_enable;
+                    option.title = past_time;
+                    timeSelect.appendChild(option);
+                }
+
+
+            }
+        })
+    }
+
+    let pickup_date = jQuery('#hidden_pickup_date').val();
+    let dropoff_date = jQuery('#hidden_dropoff_date').val();
+    let selected_time = jQuery('.pickup_time').val();
+
+
+    // Only validate if both dates are selected and they are the same day
+    if (pickup_date && dropoff_date && pickup_date == dropoff_date && selected_time) {
+        // Convert pickup time to comparable format (HH:MM)
+        let pickup_time_parts = selected_time.split(':');
+        let pickup_hours = parseInt(pickup_time_parts[0]);
+        let pickup_minutes = parseInt(pickup_time_parts[1]);
+        let pickup_time_minutes = pickup_hours * 60 + pickup_minutes;
+
+        // Clear current return time selection
+        jQuery(".dropoff_time").val("").trigger("change");
+
+        // Update return time options
+        jQuery("#dropoff_time option").each(function() {
+            var thisOptionValue = jQuery(this).val();
+            if (thisOptionValue && thisOptionValue !== '') {
+                // Convert return time to comparable format (HH:MM)
+                let return_time_parts = thisOptionValue.split(':');
+                let return_hours = parseInt(return_time_parts[0]);
+                let return_minutes = parseInt(return_time_parts[1]);
+                let return_time_minutes = return_hours * 60 + return_minutes;
+
+                // Disable return times that are earlier than or equal to pickup time
+                if (return_time_minutes <= pickup_time_minutes) {
+                    jQuery(this).attr('disabled', true);
+                } else {
+                    jQuery(this).attr('disabled', false);
+                }
+            } else {
+                jQuery(this).attr('disabled', true);
+            }
+        });
+    }
+
+
 }
 
+
+function formatTime(date, format) {
+    // Map WP PHP formats to JS Intl options
+    let options = {};
+    if (format.includes('a') || format.includes('A')) {
+        options.hour12 = true;
+    } else {
+        options.hour12 = false;
+    }
+    options.hour = 'numeric';
+    options.minute = '2-digit';
+
+    return new Intl.DateTimeFormat([], options).format(date);
+}
 
 
 
@@ -288,6 +459,47 @@ jQuery(document).on('click', '.groupCheckBox .customCheckboxLabel', function () 
     }).promise().done(function () {
         parent.find('input[type="hidden"]').val(value);
     });
+});
+
+// Real-time validation for pickup time change
+jQuery(document).on('change', '.pickup_time', function() {
+    let pickup_date = jQuery('#hidden_pickup_date').val();
+    let dropoff_date = jQuery('#hidden_dropoff_date').val();
+    let selected_time = jQuery('.pickup_time').val();
+
+    
+    // Only validate if both dates are selected and they are the same day
+    if (pickup_date && dropoff_date && pickup_date == dropoff_date && selected_time) {
+        // Convert pickup time to comparable format (HH:MM)
+        let pickup_time_parts = selected_time.split(':');
+        let pickup_hours = parseInt(pickup_time_parts[0]);
+        let pickup_minutes = parseInt(pickup_time_parts[1]);
+        let pickup_time_minutes = pickup_hours * 60 + pickup_minutes;
+        
+        // Clear current return time selection
+        jQuery(".dropoff_time").val("").trigger("change");
+        
+        // Update return time options
+        jQuery("#dropoff_time option").each(function() {
+            var thisOptionValue = jQuery(this).val();
+            if (thisOptionValue && thisOptionValue !== '') {
+                // Convert return time to comparable format (HH:MM)
+                let return_time_parts = thisOptionValue.split(':');
+                let return_hours = parseInt(return_time_parts[0]);
+                let return_minutes = parseInt(return_time_parts[1]);
+                let return_time_minutes = return_hours * 60 + return_minutes;
+                
+                // Disable return times that are earlier than or equal to pickup time
+                if (return_time_minutes <= pickup_time_minutes) {
+                    jQuery(this).attr('disabled', true);
+                } else {
+                    jQuery(this).attr('disabled', false);
+                }
+            } else {
+                jQuery(this).attr('disabled', true);
+            }
+        });
+    }
 });
 
 

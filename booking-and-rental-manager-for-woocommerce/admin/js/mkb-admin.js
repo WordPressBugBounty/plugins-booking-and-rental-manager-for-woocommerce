@@ -743,6 +743,7 @@
         const monthlyPriceItem = jQuery('.day-threshold-item-for-month');
         const weeklyPriceItem = jQuery('.day-threshold-item-for-week');
         const hourlyPriceItem = jQuery('.hourly-price-item');
+        const halfDayPriceItem = jQuery('.half-day-price-item');
 
         const monthlyPriceInput = jQuery('#monthly-price-input');
         const weeklyPriceInput = jQuery('#weekly-price-input');
@@ -780,12 +781,15 @@
 
         const timePickerToggle = jQuery('.time-picker-toggle');
         const hourlyPriceToggle = jQuery('.hourly-price-toggle');
+        const halfDayPriceToggle = jQuery('.half-day-price-toggle');
 
 
         const hourlyPriceInput = jQuery('#hourly-price-input');
+        const halfDayPriceInput = jQuery('#half-day-price-input');
         const hourThresholdInput = jQuery('#hour-threshold-input');
 
         hourlyPriceToggle.on('click', toggleHourlyPrice);
+        halfDayPriceToggle.on('click', toggleHalfDayPrice);
 
 
 
@@ -796,6 +800,7 @@
 
 
         const rbfw_enable_hourly_rate = jQuery('#rbfw_enable_hourly_rate');
+        const rbfw_enable_half_day_rate = jQuery('#rbfw_enable_half_day_rate');
         const rbfw_enable_hourly_threshold = jQuery('#rbfw_enable_hourly_threshold');
 
         // State
@@ -803,6 +808,7 @@
 
         let timePickerEnabled = rbfw_enable_time_picker.val() === 'yes';
         let hourlyPriceEnabled = rbfw_enable_time_picker.val() === 'yes';
+        let halfDayPriceEnabled = rbfw_enable_time_picker.val() === 'yes';
 
 
 
@@ -860,6 +866,7 @@
             hourlyPriceItem.css('display', timePickerEnabled ? 'flex' : 'none');
             hourThresholdItem.css('display', timePickerEnabled ? 'flex' : 'none');
             timeSlotsSection.css('display', timePickerEnabled ? 'block' : 'none');
+            halfDayPriceItem.css('display', halfDayPriceEnabled ? 'flex' : 'none');
 
             const $toggle = jQuery(this);
             const $input = jQuery('.rbfw_enable_time_picker');
@@ -879,6 +886,14 @@
             hourlyPriceToggle.toggleClass('active', hourlyPriceEnabled);
             hourlyPriceInput.prop('disabled', !hourlyPriceEnabled);
             rbfw_enable_hourly_rate.val(hourlyPriceEnabled ? 'yes' : 'no');
+        }
+
+        function toggleHalfDayPrice() {
+            halfDayPriceEnabled = !halfDayPriceEnabled;
+            halfDayPriceToggle.toggleClass('active', halfDayPriceEnabled);
+            halfDayPriceInput.prop('disabled', !halfDayPriceEnabled);
+            rbfw_enable_half_day_rate.val(halfDayPriceEnabled ? 'yes' : 'no');
+            halfDayPriceItem.css('display', halfDayPriceEnabled ? 'flex' : 'none');
         }
 
         // Input change handlers
@@ -1301,6 +1316,10 @@
             tempDiv.find(".rbfw_start_date").attr({"name": "rbfw_particulars["+total_element+"][start_date]"});
             tempDiv.find(".rbfw_end_date").attr({"name": "rbfw_particulars["+total_element+"][end_date]"});
             tempDiv.find(".add-slot-btn").attr({"data-particular_id": total_element});
+        }else if(rent_type=='mi'){
+            tempDiv.find(".rbfw_start_date").attr({"name": "rbfw_particulars_mi["+total_element+"][start_date]"});
+            tempDiv.find(".rbfw_end_date").attr({"name": "rbfw_particulars_mi["+total_element+"][end_date]"});
+            tempDiv.find(".add-slot-btn").attr({"data-particular_id": total_element});
         }else{
             tempDiv.find(".rbfw_start_date").attr({"name": "rbfw_particulars_sd["+total_element+"][start_date]"});
             tempDiv.find(".rbfw_end_date").attr({"name": "rbfw_particulars_sd["+total_element+"][end_date]"});
@@ -1386,6 +1405,17 @@
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
       `;
+            }else if(rent_type=='mi'){
+                newSlot = `
+        <div class="time-slot enabled" data-id="${index}">
+          <span class="time-slot-time">${time}</span>
+          <input type="hidden" name="rdfw_available_time_mi[${index}][id]" value="${dataId}">
+          <input type="hidden" name="rdfw_available_time_mi[${index}][time]" value="${time}">
+          <input type="hidden" name="rdfw_available_time_mi[${index}][status]" value="enabled">
+          <div class="time-slot-indicator active" title="Click to disable"></div>
+          <div class="time-slot-remove" title="Remove time slot">×</div>
+        </div>
+      `;
             }else{
                 newSlot = `
         <div class="time-slot enabled" data-id="${index}">
@@ -1411,6 +1441,17 @@
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][id]" value="${dataId}">
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][time]" value="${time}">
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][status]" value="enabled">
+          <div class="time-slot-indicator active" title="Click to disable"></div>
+          <div class="time-slot-remove" title="Remove time slot">×</div>
+        </div>
+           `;
+            }else if(rent_type=='mi'){
+                newSlot = `
+        <div class="time-slot enabled" data-id="${dataId}">
+          <span class="time-slot-time">${time}</span>
+          <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][id]" value="${dataId}">
+          <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][time]" value="${time}">
+          <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][status]" value="enabled">
           <div class="time-slot-indicator active" title="Click to disable"></div>
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
@@ -1441,7 +1482,7 @@
             return timeA.localeCompare(timeB);
         });
 
-        console.log('lllll',$slots);
+
 
 
         $timeSlotsContainer.html($slots);
