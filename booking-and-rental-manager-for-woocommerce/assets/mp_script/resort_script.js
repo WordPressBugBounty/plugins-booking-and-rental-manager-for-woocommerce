@@ -128,6 +128,7 @@ jQuery(document).on('click','.rbfw_chk_availability_btn',function(e) {
                 } else{
                     jQuery('.rbfw_room_price_category_tabs').html(response);
                 }
+
             }
         });
 });
@@ -217,8 +218,29 @@ function calculateTotalDurationPrice() {
     var sub_total_price = room_duration_price + parseFloat(jQuery('#rbfw_extra_service_price').val());
 
 
+    let rbfw_management_price = 0;
+    jQuery('.rbfw-management-price-resort:checked').each(function() {  
+        let price_type = jQuery(this).data('price_type');
+        let price = parseFloat(jQuery(this).data('price')) || 0;
+        let resort_total_days = parseFloat(jQuery('#resort_total_days').val()) || 0;
+        if(price_type == 'percentage'){
+            rbfw_management_price += ( price/100 ) * sub_total_price;
+        }else{
+            let frequency = jQuery(this).data('frequency');
+            if(frequency == 'one-time' ){
+                rbfw_management_price += price;
+            }else{
+                rbfw_management_price += price * resort_total_days
+            }
+        }
+    });
 
-    jQuery('.duration-costing .price-figure').text(rbfw_translation.currency + room_duration_price.toFixed(2));
+    jQuery('#rbfw_management_price_resort').val(rbfw_management_price.toFixed(2));
+    jQuery('.management-costing span').text(wc_price_rbfw(rbfw_management_price));
+
+
+
+    jQuery('.duration-costing .price-figure').text(wc_price_rbfw(room_duration_price));
 
 
 
@@ -232,15 +254,15 @@ function calculateTotalDurationPrice() {
         }
     }
 
-    var total_price = sub_total_price + parseFloat(rbfw_security_deposit_actual_amount);
+    var total_price = sub_total_price + rbfw_management_price + parseFloat(rbfw_security_deposit_actual_amount);
     if(rbfw_security_deposit_actual_amount){
         jQuery('.security_deposit').show();
-        jQuery('.security_deposit span').html(rbfw_translation.currency + parseFloat(rbfw_security_deposit_actual_amount).toFixed(2));
+        jQuery('.security_deposit span').html(wc_price_rbfw(parseFloat(rbfw_security_deposit_actual_amount)));
     }
 
 
-    jQuery('.subtotal .price-figure').text(rbfw_translation.currency + sub_total_price.toFixed(2));
-    jQuery('.total .price-figure').text(rbfw_translation.currency + total_price.toFixed(2));
+    jQuery('.subtotal .price-figure').text(wc_price_rbfw(sub_total_price));
+    jQuery('.total .price-figure').text(wc_price_rbfw(total_price));
 
 }
 
@@ -259,9 +281,29 @@ function calculateTotalResortExtraService() {
 
     // Output total
     jQuery('#rbfw_extra_service_price').val(resort_extra_service.toFixed(2));
-    jQuery('.resource-costing .price-figure').text(rbfw_translation.currency + resort_extra_service.toFixed(2));
+    jQuery('.resource-costing .price-figure').text(wc_price_rbfw(resort_extra_service));
 
     let sub_total_price = parseFloat(jQuery('#rbfw_room_duration_price').val()) + resort_extra_service;
+
+    let rbfw_management_price = 0;
+    jQuery('.rbfw-management-price-resort:checked').each(function() {
+        let price_type = jQuery(this).data('price_type');
+        let price = parseFloat(jQuery(this).data('price')) || 0;
+        let resort_total_days = parseFloat(jQuery('#resort_total_days').val()) || 0;
+        if(price_type == 'percentage'){
+            rbfw_management_price += ( price/100 ) * sub_total_price;
+        }else{
+            let frequency = jQuery(this).data('frequency');
+            if(frequency == 'one-time' ){
+                rbfw_management_price += price;
+            }else{
+                rbfw_management_price += price * resort_total_days
+            }
+        }
+    });
+
+    jQuery('#rbfw_management_price_resort').val(rbfw_management_price.toFixed(2));
+    jQuery('.management-costing span').text(wc_price_rbfw(rbfw_management_price));
 
 
     let rbfw_security_deposit_actual_amount = 0;
@@ -274,13 +316,88 @@ function calculateTotalResortExtraService() {
         }
     }
 
-    var total_price = sub_total_price + parseFloat(rbfw_security_deposit_actual_amount);
+    var total_price = sub_total_price + rbfw_management_price + parseFloat(rbfw_security_deposit_actual_amount);
     if(rbfw_security_deposit_actual_amount){
         jQuery('.security_deposit').show();
-        jQuery('.security_deposit span').html(rbfw_translation.currency + parseFloat(rbfw_security_deposit_actual_amount).toFixed(2));
+        jQuery('.security_deposit span').html(wc_price_rbfw(parseFloat(rbfw_security_deposit_actual_amount)));
     }
 
 
-    jQuery('.subtotal .price-figure').text(rbfw_translation.currency + sub_total_price.toFixed(2));
-    jQuery('.total .price-figure').text(rbfw_translation.currency + total_price.toFixed(2));
+    jQuery('.subtotal .price-figure').text(wc_price_rbfw(sub_total_price));
+    jQuery('.total .price-figure').text(wc_price_rbfw(total_price));
+}
+
+
+jQuery(document).on('change', '.rbfw-management-price-resort', function() {
+
+    if (jQuery(this).hasClass('rbfw-fee-required')) {
+        jQuery(this).prop('checked', true);
+        e.preventDefault(); // prevent change
+    }
+
+    var $checkbox = jQuery(this);
+    var $parent = $checkbox.closest('.rbfw-checkbox'); // find the parent container
+    var $managementQty = $parent.find('.rbfw-management-qty'); // hidden input to set yes/no
+
+    if ($checkbox.is(':checked')) {
+        $managementQty.val('yes'); // Mark as selected
+    } else {
+        $managementQty.val('no'); // Mark as not selected
+    }
+
+    calculateTotalManagementPriceResort();
+});
+
+
+
+function calculateTotalManagementPriceResort() {
+
+
+    let sub_total_price = parseFloat(jQuery('#rbfw_room_duration_price').val()) + parseFloat(jQuery('#rbfw_extra_service_price').val());;
+
+    let rbfw_management_price = 0;
+    jQuery('.rbfw-management-price-resort:checked').each(function() {
+        let price_type = jQuery(this).data('price_type');
+        let price = parseFloat(jQuery(this).data('price')) || 0;
+
+        let resort_total_days = parseFloat(jQuery('#resort_total_days').val()) || 0;
+
+        if(price_type == 'percentage'){
+            rbfw_management_price += ( price/100 ) * sub_total_price;
+        }else{
+            let frequency = jQuery(this).data('frequency');
+            if(frequency == 'one-time' ){
+                rbfw_management_price += price;
+            }else{
+                rbfw_management_price += price * resort_total_days
+            }
+        }
+    });
+
+
+    jQuery('#rbfw_management_price_resort').val(rbfw_management_price.toFixed(2));
+    jQuery('.management-costing span').text(wc_price_rbfw(rbfw_management_price));
+
+
+
+
+    let rbfw_security_deposit_actual_amount = 0;
+    if(jQuery('#rbfw_security_deposit_enable').val() == 'yes'){
+        let rbfw_security_deposit_amount  = jQuery('#rbfw_security_deposit_amount').val();
+        if (jQuery('#rbfw_security_deposit_type').val() == 'percentage'){
+            rbfw_security_deposit_actual_amount = (rbfw_security_deposit_amount / 100) * sub_total_price;
+        }else{
+            rbfw_security_deposit_actual_amount = rbfw_security_deposit_amount;
+        }
+    }
+
+    var total_price = sub_total_price + rbfw_management_price + parseFloat(rbfw_security_deposit_actual_amount);
+    if(rbfw_security_deposit_actual_amount){
+        jQuery('.security_deposit').show();
+        jQuery('.security_deposit span').html(wc_price_rbfw(parseFloat(rbfw_security_deposit_actual_amount)));
+    }
+
+
+    jQuery('.subtotal .price-figure').text(wc_price_rbfw(sub_total_price));
+    jQuery('.total .price-figure').text(wc_price_rbfw(total_price));
 }

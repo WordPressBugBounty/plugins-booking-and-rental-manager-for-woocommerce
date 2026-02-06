@@ -11,6 +11,114 @@ function rbfw_woo_install_check() {
     }
 }
 
+/**
+ * Detect dangerous serialized payloads (objects/custom classes).
+ *
+ * @param string $value Serialized string.
+ *
+ * @return bool
+ */
+function rbfw_feature_category_has_disallowed_types( $value ) {
+    return (bool) preg_match( '/(^|;)(O|C)\:\d+\:\"/i', $value );
+}
+
+/**
+ * Recursively sanitize feature category arrays without depending on plugin classes.
+ *
+ * @param array $value
+ *
+ * @return array
+ */
+function rbfw_sanitize_feature_category_array( $value ) {
+    if ( class_exists( 'RBFW_Function' ) ) {
+        return RBFW_Function::data_sanitize( $value );
+    }
+
+    array_walk_recursive(
+        $value,
+        static function ( &$item ) {
+            if ( is_scalar( $item ) ) {
+                $item = sanitize_text_field( $item );
+            } else {
+                $item = '';
+            }
+        }
+    );
+
+    return $value;
+}
+
+/**
+ * Convert raw meta into a safe, sanitized feature category array.
+ *
+ * @param mixed $value
+ *
+ * @return array
+ */
+function rbfw_prepare_feature_category_meta_value( $value ) {
+    if ( empty( $value ) ) {
+        return array();
+    }
+
+    if ( is_string( $value ) ) {
+        $value = wp_unslash( $value );
+
+        if ( ! is_serialized( $value ) ) {
+            return array();
+        }
+
+        if ( rbfw_feature_category_has_disallowed_types( $value ) ) {
+            return array();
+        }
+
+        if ( version_compare( PHP_VERSION, '7.0.0', '>=' ) ) {
+            $value = @unserialize( $value, array( 'allowed_classes' => false ) );
+        } else {
+            $value = @unserialize( $value );
+            if ( is_object( $value ) ) {
+                return array();
+            }
+        }
+    } elseif ( is_array( $value ) ) {
+        $value = wp_unslash( $value );
+    } else {
+        return array();
+    }
+
+    if ( ! is_array( $value ) ) {
+        return array();
+    }
+
+    return rbfw_sanitize_feature_category_array( $value );
+}
+
+/**
+ * Helper to fetch the sanitized feature category meta.
+ *
+ * @param int $post_id
+ *
+ * @return array
+ */
+function rbfw_get_feature_category_meta( $post_id ) {
+    $raw_value = get_post_meta( $post_id, 'rbfw_feature_category', true );
+
+    return rbfw_prepare_feature_category_meta_value( $raw_value );
+}
+
+/**
+ * Sanitize feature category meta on save regardless of the source.
+ *
+ * @param mixed  $meta_value
+ * @param string $meta_key
+ * @param string $meta_type
+ *
+ * @return array
+ */
+function rbfw_filter_feature_category_meta( $meta_value, $meta_key, $meta_type ) {
+    return rbfw_prepare_feature_category_meta_value( $meta_value );
+}
+add_filter( 'sanitize_post_meta_rbfw_feature_category', 'rbfw_filter_feature_category_meta', 10, 3 );
+
 
 function want_loco_translate()
 {
@@ -123,4 +231,41 @@ function custom_taxable_fee() {
         WC()->cart->add_fee(__('Security Deposit', 'booking-and-rental-manager-for-woocommerce'), $total_deposit_amount, false); // 'true' makes it taxable
     }
 }
+
+
+add_action( 'rbfw_ticket_feature_info', 'rbfw_ticket_feature_info' );
+function rbfw_ticket_feature_info(){
+
+    $rbfw_real_time_availability_display = rbfw_get_option('rbfw_real_time_availability_display', 'rbfw_basic_gen_settings');
+
+    if($rbfw_real_time_availability_display=='yes'){
+
+    ?>
+    <div class="rbfw-bikecarsd-calendar-header">
+        <div class="rbfw-bikecarsd-calendar-header-feature">
+            <i class="fas fa-clock"></i>
+            <?php esc_html_e('Real-time availability','booking-and-rental-manager-for-woocommerce'); ?>
+        </div>
+        <div class="rbfw-bikecarsd-calendar-header-feature">
+            <i class="fas fa-bolt"></i>
+            <?php esc_html_e('Instant confirmation','booking-and-rental-manager-for-woocommerce'); ?>
+        </div>
+    </div>
+    <?php
+    }
+}
+
+function check_multi_day_price_saver( $day_number, $rbfw_additional_day_prices) {
+    foreach ( $rbfw_additional_day_prices as $item ) {
+        $rbfw_start_day = $item['rbfw_start_day'];
+        $rbfw_end_day   = $item['rbfw_end_day'];
+        if ( $day_number >= $rbfw_start_day  &&  $day_number <= $rbfw_end_day) {
+            return $item['rbfw_daily_price'];
+        }
+    }
+    return '';
+}
+
+
+
 

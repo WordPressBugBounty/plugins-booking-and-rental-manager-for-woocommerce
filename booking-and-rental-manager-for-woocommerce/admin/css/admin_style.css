@@ -1,3 +1,19 @@
+:root {
+    --default-color: #000;
+    --border_color: #DDD;
+    --active_color: #0E6BB7;
+    --default-bg: #FFF;
+    --theme-color: #F12971;
+    --theme-color_ee: #F12971ee;
+    --theme-color_cc: #F12971cc;
+    --theme-color_aa: #F12971aa;
+    --theme-color_88: #F1297188;
+    --theme-color_77: #F1297177;
+    --theme-alternate-color: #fff;
+    --default-content-shadow: 0 0 2px #665F5F7A;
+    --content_bg: #FAFCFE;
+}
+
 .rbfw_hide {
     display: none;
 }
@@ -5566,7 +5582,7 @@ span.ppof-button.add-service-category.mt-1, .field-text-multi-wrapper-rbfw_featu
 .rbfw_es_price_config_wrapper section.bg-light.mt-5 {
     padding-left: 20px !important;
 }
-.feature_category_inner_item_wrap [name^="rbfw_feature_category"][name*="[cat_features]"][name$="[title]"]{width:80% !important;}
+.feature_category_inner_item_wrap [name^="rbfw_feature_category"][name*="[cat_features]"][name$="[title]"]{width:74% !important;}
 .field-text-multi-wrapper-rbfw_feature_category section{ padding: 0px 0px !important;}
 #rbfw_add_meta_box .bg-light {
     border-radius: 10px 10px 0px 0px;
@@ -5707,8 +5723,8 @@ border: 1px solid #d4dadf !important;
 .rbfw_multi_day_price_conf .time-slots-container {
     margin-top: 0px;
     background-color: white;
-    padding: 15px;
     border-radius: 4px;
+    padding:0 10px;
 }
 
 .rbfw_multi_day_price_conf .time-slots {
@@ -5720,15 +5736,14 @@ border: 1px solid #d4dadf !important;
 .rbfw_multi_day_price_conf .time-slot {
     display: inline-flex;
     align-items: center;
-    background-color: #f5f5f5;
-    padding: 5px 10px;
-    border-radius: 20px;
-    border: 1px solid #ddd;
+    padding: 5px;
+    border: 1px solid #999;
     font-size: 14px;
 }
 
 .rbfw_multi_day_price_conf .time-slot.enabled {
-    background-color: #e8f5e9;
+    background-color: var(--mage-primary);
+    color: white;
 }
 
 .rbfw_multi_day_price_conf .time-slot-time {
@@ -5736,16 +5751,15 @@ border: 1px solid #d4dadf !important;
 }
 
 .rbfw_multi_day_price_conf .time-slot-indicator {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    border-radius:5px;
     background-color: #ccc;
+    color: #333;
     cursor: pointer;
-    margin-right: 5px;
+    margin-right: 1px;
 }
 
 .rbfw_multi_day_price_conf .time-slot.enabled .time-slot-indicator {
-    background-color: #4caf50;
+    background-color: green;
 }
 
 .rbfw_multi_day_price_conf .time-slot-remove {
@@ -5755,7 +5769,7 @@ border: 1px solid #d4dadf !important;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background-color: #f44336;
+    background-color: #333;
     color: white;
     font-size: 12px;
     font-weight: bold;
@@ -5824,7 +5838,7 @@ border: 1px solid #d4dadf !important;
     color: #00796b;
     padding: 6px 12px;
     margin: 5px 5px 0 0;
-    border-radius: 20px;
+    border-radius:5px;
     position: relative;
     font-size: 14px;
 }
@@ -6003,5 +6017,8 @@ border: 1px solid #d6d6d6;
 
 .mep-quick-setup .nextTab_prev:hover span, .mep-quick-setup .nextTab_prev:focus span{
 	color: #000;
+}
+.inventory_managed_order_status label{
+    padding-right: 20px;
 }
 

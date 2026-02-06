@@ -132,6 +132,11 @@
         /*start single day hourly inventory managed*/
 
         jQuery(document).on('click', '.rbfw_service_type .single-type-timely', function(e) {
+
+            if (jQuery(this).hasClass('rbfw-sold-out')) {
+                return;
+            }
+
             let rbfw_bikecarsd_selected_date = jQuery('#rbfw_bikecarsd_selected_date').val();
             let time_slot_switch = jQuery('#rbfw_time_slot_switch').val();
             if(rbfw_bikecarsd_selected_date==''){
@@ -139,9 +144,7 @@
                 return;
             }
 
-
             let start_date = jQuery('#rbfw_bikecarsd_selected_date').val();
-
             let enable_specific_duration = jQuery('#enable_specific_duration').val();
 
             if(enable_specific_duration=='on'){
@@ -153,23 +156,20 @@
             }else{
                 var duration = jQuery(this).data('duration');
                 var duration_type = jQuery(this).data('d_type');
-
                 var start_time = jQuery('.rbfw-select.rbfw-time-price.pickup_time').val();
 
-
                 if(time_slot_switch == 'yes'){
-                    if(start_time==''){
-                        alert("please enter pickup time");
+                    if(start_time == ''){
+                        alert("Please enter pickup time");
                         return;
                     }
                 }
 
                 jQuery('#rbfw_start_time').val(start_time);
 
-                // Combine start_date + start_time into a Date object
                 let startDateTime = new Date(start_date + ' ' + start_time);
 
-                // Add duration
+// Add duration
                 if(duration_type === 'Hours'){
                     startDateTime.setHours(startDateTime.getHours() + duration);
                 } else if(duration_type === 'Days'){
@@ -178,9 +178,15 @@
                     startDateTime.setDate(startDateTime.getDate() + (duration * 7));
                 }
 
-                // Extract back into date & time
-                let endDate = startDateTime.toISOString().split('T')[0]; // YYYY-MM-DD
-                let endTime = startDateTime.toTimeString().split(' ')[0].slice(0,5); // HH:MM
+// Format local end date/time (no UTC conversion)
+                let year = startDateTime.getFullYear();
+                let month = String(startDateTime.getMonth() + 1).padStart(2, '0');
+                let day = String(startDateTime.getDate()).padStart(2, '0');
+                let endDate = `${year}-${month}-${day}`;
+
+                let hours = String(startDateTime.getHours()).padStart(2, '0');
+                let minutes = String(startDateTime.getMinutes()).padStart(2, '0');
+                let endTime = `${hours}:${minutes}`;
 
                 jQuery('#rbfw_end_date').val(endDate);
                 jQuery('#rbfw_end_time').val(endTime);
@@ -198,7 +204,7 @@
             }
             jQuery('#rbfw_item_quantity').html(quantity_options);
             jQuery('.rbfw_quantiry_area_sd .rbfw_sd_price_input').val(service_price);
-            jQuery('.rbfw_quantiry_area_sd .rbfw_sd_price').text(rbfw_translation.currency + service_price.toFixed(2));
+            jQuery('.rbfw_quantiry_area_sd .rbfw_sd_price').text(wc_price_rbfw(service_price));
             jQuery(".rbfw_quantiry_area_sd").show();
             jQuery(".rbfw_extra_service_sd").show();
             var rbfw_service_price = jQuery('#rbfw_item_quantity').val() * service_price;
@@ -479,8 +485,14 @@ function rbfw_price_calculation_sd(){
     var rbfw_es_service_price = parseInt(jQuery('#rbfw_es_service_price').val());
     var sub_total_price = rbfw_service_price + rbfw_es_service_price;
 
-    jQuery('.duration-costing span').text(rbfw_translation.currency + rbfw_service_price.toFixed(2));
-    jQuery('.extra_service_cost span').text(rbfw_translation.currency + rbfw_es_service_price.toFixed(2));
+    let rbfw_management_price = fee_management(sub_total_price,1,1);
+
+
+    jQuery('#rbfw_management_price').val(rbfw_management_price.toFixed(2));
+    jQuery('.management-costing span').text( wc_price_rbfw(rbfw_management_price));
+
+    jQuery('.duration-costing span').text(wc_price_rbfw(rbfw_service_price));
+    jQuery('.extra_service_cost span').text(wc_price_rbfw(rbfw_es_service_price));
 
 
     let rbfw_security_deposit_actual_amount = 0;
@@ -493,15 +505,18 @@ function rbfw_price_calculation_sd(){
         }
     }
 
-    var total_price = sub_total_price + parseFloat(rbfw_security_deposit_actual_amount);
+    var total_price = sub_total_price + rbfw_management_price + parseFloat(rbfw_security_deposit_actual_amount);
+
+
+
     if(rbfw_security_deposit_actual_amount){
         jQuery('.security_deposit').show();
-        jQuery('.security_deposit span').html(rbfw_translation.currency + parseFloat(rbfw_security_deposit_actual_amount).toFixed(2));
+        jQuery('.security_deposit span').html(wc_price_rbfw(parseFloat(rbfw_security_deposit_actual_amount)));
     }
 
 
-    jQuery('.subtotal span').text(rbfw_translation.currency + total_price.toFixed(2));
-    jQuery('.total span').text(rbfw_translation.currency + total_price.toFixed(2));
+    jQuery('.subtotal span').text(wc_price_rbfw(sub_total_price));
+    jQuery('.total span').text(wc_price_rbfw(total_price));
 }
 
 function datepicker_inline(){
@@ -548,6 +563,7 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
             var service_info = response.service_info;
             var extra_service_info = response.extra_service_info;
 
+
             jQuery('.single-type-timely').each(function() {
                 var $el = jQuery(this);
 
@@ -558,10 +574,28 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
                     // Update attributes
                     $el.attr('data-price', service_info[type].price);
                     $el.attr('data-available_quantity', service_info[type].stock);
+
+                    if(service_info[type].stock==0){
+                        $el.find('.rent-type').html(type + '<span class="solded">Sold Out</span>');
+
+                        $el.addClass('rbfw-sold-out');
+
+
+
+
+                    }else{
+                        $el.find('.rent-type').text(type);
+
+                        $el.removeClass('rbfw-sold-out');
+                    }
+
+
                     // (Optional) Update displayed price text
-                    $el.find('.price').text(rbfw_translation.currency + service_info[type].price);
+                    $el.find('.price').text(rbfw_js_variables.currency + service_info[type].price);
                 }
             });
+
+
 
             //jQuery('.rbfw_service_type_timely').html(response);
             jQuery('button.rbfw_bikecarsd_book_now_btn').attr('disabled',true);

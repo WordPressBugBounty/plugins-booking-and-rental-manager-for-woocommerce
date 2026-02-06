@@ -10,8 +10,9 @@ $rbfw_enable_start_end_date  = get_post_meta( $rbfw_id, 'rbfw_enable_start_end_d
 
 do_action( 'rbfw_before_cart_item_display', $cart_item, $rbfw_id );
 
-$security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['security_deposit_amount'] : '';
 
+$security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['security_deposit_amount'] : '';
+$rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_management_info'] : [];
 
 ?>
 
@@ -215,6 +216,28 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
                 <td><?php echo wp_kses(wc_price($discount_amount),rbfw_allowed_html()); ?></td>
             </tr>
         <?php endif; ?>
+
+        <?php if ( ! empty( $rbfw_management_info ) ){ ?>
+            <?php
+            foreach ($rbfw_management_info as $key => $value){
+                $service_label = $key; //service name
+                $service_price = (float)$value['price'];
+                $refundable = ($value['refundable']=='yes')?'( Refundable )':'( Non refundable )';
+                ?>
+                <tr>
+                    <th>
+                        <?php echo esc_html($service_label); ?> <?php echo esc_html($refundable); ?>:
+                    </th>
+                    <td>
+                        (<?php echo wp_kses($value['price_desc'],rbfw_allowed_html()); ?>) = <?php echo wp_kses(wc_price($service_price),rbfw_allowed_html()); ?>
+                    </td>
+                </tr>
+                <?php
+            } ?>
+        <?php } ?>
+
+
+
         <?php if ( ! empty( $security_deposit_amount ) ): ?>
             <tr>
                 <th><?php echo esc_html((!empty(get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true)) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true) : 'Security Deposit')); ?>:</th>
@@ -334,7 +357,7 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
                     <?php } ?>
                 </th>
                 <td>
-                    <?php echo esc_html(rbfw_date_format($start_datetime)) ; ?>
+                    <?php echo esc_html(rbfw_get_datetime($start_datetime,'date-text')) ; ?>
                     <?php if(($start_time)){
                         echo ' @'.esc_html(gmdate(get_option('time_format'), strtotime($start_time)));
                     } ?>
@@ -426,6 +449,27 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
                 <td><?php echo wp_kses(wc_price($rbfw_bikecarsd_service_price),rbfw_allowed_html()); ?></td>
             </tr>
         <?php endif; ?>
+
+        <?php if ( ! empty( $rbfw_management_info ) ){ ?>
+            <?php
+            foreach ($rbfw_management_info as $key => $value){
+                $service_label = $key; //service name
+                $service_price = (float)$value['price'];
+                $service_price_desc = (float)$value['price_desc'];
+                $refundable = ($value['refundable']=='yes')?'( Refundable )':'( Non refundable )';
+                ?>
+                <tr>
+                    <th>
+                        <?php echo esc_html($service_label); ?> <?php echo esc_html($refundable); ?>:
+                    </th>
+                    <td>
+                        (<?php echo wp_kses($service_price_desc,rbfw_allowed_html()); ?>) = <?php echo wp_kses(wc_price($service_price),rbfw_allowed_html()); ?>
+                    </td>
+                </tr>
+                <?php
+            } ?>
+        <?php } ?>
+
         <?php if ( ! empty( $security_deposit_amount ) ): ?>
             <tr>
                 <th><?php echo esc_html((!empty(get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true)) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true) : 'Security Deposit')); ?>:</th>
@@ -442,7 +486,6 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
 
     $start_datetime     = $cart_item['rbfw_start_datetime'] ? $cart_item['rbfw_start_datetime'] : '';
     $end_datetime       = $cart_item['rbfw_end_datetime'] ? $cart_item['rbfw_end_datetime'] : '';
-
     $start_date         = $cart_item['rbfw_start_date'] ? $cart_item['rbfw_start_date'] : '';
     $start_time         = $cart_item['rbfw_start_time'] ? $cart_item['rbfw_start_time'] : '';
     $end_date           = $cart_item['rbfw_end_date'] ? $cart_item['rbfw_end_date'] : '';
@@ -460,6 +503,7 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
     $rbfw_service_price = $cart_item['rbfw_service_price'] ? $cart_item['rbfw_service_price'] : '';
     $rbfw_service_info 	= $cart_item['rbfw_service_info'] ? $cart_item['rbfw_service_info'] : [];
     $rbfw_service_infos 	= $cart_item['rbfw_service_infos'] ? $cart_item['rbfw_service_infos'] : [];
+
     $rbfw_ticket_info = $cart_item['rbfw_ticket_info'] ? $cart_item['rbfw_ticket_info'] : [];
     $variation_info = $cart_item['rbfw_variation_info'] ? $cart_item['rbfw_variation_info'] : [];
     $total_days = $cart_item['total_days'];
@@ -542,7 +586,6 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
         <?php } ?>
 
 
-        <?php echo $start_time.' '.$end_time ?>
 
         <?php if (!empty($end_datetime) && !empty($end_time)){ ?>
             <tr>
@@ -686,20 +729,43 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
                 } ?>
             <?php } ?>
 
-            <?php if (  $discount_amount ): ?>
+        <?php if ( ! empty( $rbfw_management_info ) ){ ?>
+            <?php
+
+            foreach ($rbfw_management_info as $key => $value){
+
+                $service_label = $key; //service name
+                $service_price = (float)$value['price'];
+                $refundable = ($value['refundable']=='yes')?'( Refundable )':'( Non refundable )';
+                ?>
                 <tr>
                     <th>
-                        <?php
-                        if($rbfw->get_option_trans('rbfw_text_discount', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
-                            echo esc_html($rbfw->get_option_trans('rbfw_text_discount', 'rbfw_basic_translation_settings'));
-                        }else{
-                            echo esc_html__('Discount','booking-and-rental-manager-for-woocommerce') . ' :';
-                        }
-                        ?>
+                        <?php echo esc_html($service_label); ?> <?php echo esc_html($refundable); ?>:
                     </th>
-                    <td><?php echo wp_kses(wc_price($discount_amount),rbfw_allowed_html()); ?></td>
+                    <td>
+                        (<?php echo wp_kses($value['price_desc'],rbfw_allowed_html()); ?>) = <?php echo wp_kses(wc_price($service_price),rbfw_allowed_html()); ?>
+                    </td>
                 </tr>
-            <?php endif; ?>
+                <?php
+            } ?>
+        <?php } ?>
+
+
+
+        <?php if (  $discount_amount ): ?>
+            <tr>
+                <th>
+                    <?php
+                    if($rbfw->get_option_trans('rbfw_text_discount', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
+                        echo esc_html($rbfw->get_option_trans('rbfw_text_discount', 'rbfw_basic_translation_settings'));
+                    }else{
+                        echo esc_html__('Discount','booking-and-rental-manager-for-woocommerce') . ' :';
+                    }
+                    ?>
+                </th>
+                <td><?php echo wp_kses(wc_price($discount_amount),rbfw_allowed_html()); ?></td>
+            </tr>
+        <?php endif; ?>
 
 
             <?php if ( ! empty( $security_deposit_amount ) ): ?>
@@ -859,6 +925,27 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
             <?php } ?>
         <?php } ?>
 
+        <?php if ( ! empty( $rbfw_management_info ) ){ ?>
+            <?php
+
+            foreach ($rbfw_management_info as $key => $value){
+                $service_label = $key; //service name
+                $service_price = (float)$value['price'];
+                $service_price_desc = (float)$value['price_desc'];
+                $refundable = ($value['refundable']=='yes')?'( Refundable )':'( Non refundable )';
+                ?>
+                <tr>
+                    <th>
+                        <?php echo esc_html($service_label); ?> <?php echo esc_html($refundable); ?>:
+                    </th>
+                    <td>
+                        (<?php echo wp_kses($service_price_desc,rbfw_allowed_html()); ?>) = <?php echo wp_kses(wc_price($service_price),rbfw_allowed_html()); ?>
+                    </td>
+                </tr>
+                <?php
+            } ?>
+        <?php } ?>
+
         <?php if ( ! empty( $security_deposit_amount ) ): ?>
             <tr>
                 <th><?php echo esc_html((!empty(get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true)) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_label', true) : 'Security Deposit')); ?>:</th>
@@ -872,3 +959,5 @@ $security_deposit_amount 	= $cart_item['security_deposit_amount'] ? $cart_item['
 
 
 <?php do_action( 'rbfw_after_cart_item_display', $cart_item ); ?>
+
+

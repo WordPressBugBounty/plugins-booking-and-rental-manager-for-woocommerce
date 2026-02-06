@@ -6,10 +6,8 @@
 ?>
 <?php
 	global $rbfw;
-	global $frontend;
 	$post_id                 = $post_id ?? 0;
-	$frontend                = $frontend ?? 0;
-	$rbfw_feature_category   = get_post_meta( $post_id, 'rbfw_feature_category', true ) ? maybe_unserialize( get_post_meta( $post_id, 'rbfw_feature_category', true ) ) : [];
+	$rbfw_feature_category   = rbfw_get_feature_category_meta( $post_id );
 	$tab_style               = $rbfw->get_option_trans( 'rbfw_single_rent_tab_style', 'rbfw_basic_single_rent_page_settings', 'horizontal' );
 	$rbfw_enable_faq_content = get_post_meta( $post_id, 'rbfw_enable_faq_content', true ) ? get_post_meta( $post_id, 'rbfw_enable_faq_content', true ) : 'no';
 	$slide_style             = $rbfw->get_option_trans( 'super_slider_style', 'super_slider_settings', '' );
@@ -17,7 +15,7 @@
 <div class="mp_default_theme">
     <div class="mpContainer">
         <div class="mp_details_page">
-			<?php if ( $frontend ) { ?>
+            <?php  if(!is_admin()){ ?>
                 <div class="mp_left_section">
                     <div class="mpStyle <?php echo esc_attr( $slide_style ); ?>">
 						<?php do_action( 'rbfw_slider', $post_id, 'rbfw_gallery_images' ); ?>

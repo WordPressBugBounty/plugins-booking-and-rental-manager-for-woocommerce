@@ -82,7 +82,7 @@
 			}
 
 			public function feature_lists($post_id){
-				$rbfw_feature_category = get_post_meta($post_id,'rbfw_feature_category',true) ? maybe_unserialize(get_post_meta($post_id, 'rbfw_feature_category', true)) : [];
+				$rbfw_feature_category = rbfw_get_feature_category_meta( $post_id );
 				?>
 				<div class="rbfw-features" >
 					<div class="rbfw-single-left-information-item">
@@ -103,7 +103,7 @@
 											$title = $features['title'];
 											if($title){ ?>
 												<li>
-													<span><i class="<?php echo esc_attr(esc_attr($icon)); ?>"></i><?php echo esc_html($title); ?></span>
+													<span><i class="<?php echo esc_attr($icon); ?>"></i><?php echo esc_html($title); ?></span>
 												</li>
 												<?php
 											}
@@ -138,4 +138,5 @@
 
 		}
 		new RBFW_Frontend();
+
 	}

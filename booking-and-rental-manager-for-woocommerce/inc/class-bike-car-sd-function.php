@@ -56,29 +56,6 @@
                 }
 
 
-                /*foreach ( $rbfw_type_info as $key => $value ):
-                    $rent_type = $key; //Type1
-                    if ( array_key_exists( $rent_type, $rent_types ) ) { // if Type1 exist in array
-                        $rent_price += (float) $rent_types[ $rent_type ] * (float) $value; // addup price
-                    }
-                endforeach;*/
-
-
-
-
-
-           /*     if ( ! empty( $rent_info ) ) {
-					foreach ( $rent_info as $key => $value ) {
-						$rent_type = $key; //Type1
-						if ( $value > 0 ) {
-							if ( array_key_exists( $rent_type, $rent_types ) ) { // if Type1 exist in array
-								$main_array[ $rent_type ] = '(' . rbfw_mps_price( $rent_types[ $rent_type ] ) . ' x ' . (float) $value . ') = ' . rbfw_mps_price( (float) $rent_types[ $rent_type ] * (float) $value ); // type = quantity
-							}
-						}
-					}
-				}*/
-
-
 
 
 				return $main_array;
@@ -104,7 +81,7 @@
 				return $main_array;
 			}
 
-			public function rbfw_bikecarsd_ticket_info( $product_id, $rbfw_start_datetime = null, $rbfw_end_date = null, $rbfw_type_info = array(), $rbfw_service_info = array(), $selected_time = null, $rbfw_regf_info = array(), $rbfw_pickup_point = null, $rbfw_dropoff_point = null, $end_time = null, $rbfw_item_quantity = null , $booking_date = null) {
+			public function rbfw_bikecarsd_ticket_info( $product_id, $rbfw_start_datetime = null, $rbfw_end_date = null, $rbfw_type_info = array(), $rbfw_service_info = array(), $selected_time = null, $rbfw_regf_info = array(), $rbfw_pickup_point = null, $rbfw_dropoff_point = null, $end_time = null, $rbfw_item_quantity = null , $booking_date = null, $rbfw_management_info=[] , $rbfw_management_price=0) {
 				global $rbfw;
 				if ( ! empty( $product_id ) && ! empty( $rbfw_type_info ) ):
 					$rent_price          = 0;
@@ -193,6 +170,7 @@
 					$main_array[0]['rbfw_end_datetime']       = $rbfw_end_date . ' ' . $end_time;
 					$main_array[0]['rbfw_type_info']          = $rbfw_type_info;
 					$main_array[0]['rbfw_service_info']       = $rbfw_service_info;
+					$main_array[0]['rbfw_management_info']    = $rbfw_management_info;
 					$main_array[0]['rbfw_rent_type']          = $rbfw_rent_type;
 					$main_array[0]['rbfw_id']                 = $product_id;
 					$main_array[0]['rbfw_item_quantity']      = $rbfw_item_quantity;
@@ -219,6 +197,7 @@
 					$main_array[0]['rbfw_mps_tax']   = $percent;
 					$main_array[0]['duration_cost']  = $total_rent_price;
 					$main_array[0]['service_cost']   = $total_service_price;
+					$main_array[0]['rbfw_management_price']   = $rbfw_management_price;
 					$main_array[0]['rbfw_regf_info'] = $rbfw_regf_info;
 
 					return $main_array;
@@ -536,6 +515,7 @@
                     if ( $enable_specific_duration == 'on' ) {
                         $start_time = $value['start_time'];
                         $end_time = $value['end_time'];
+                        $end_date = $start_date;
                     } else {
                         $start_date_time   = new DateTime( $start_date . ' ' . $start_time );
                         $for_end_date_time = $start_date_time;
@@ -547,11 +527,7 @@
                         $end_time = $for_end_date_time->format( 'H:i:s' );
                     }
 
-
-
-
-
-					$rbfw_timely_available_quantity = rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_time, $end_date, $end_time );
+                    $rbfw_timely_available_quantity = rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_time, $end_date, $end_time );
                     $sd_service_info[$value['rent_type']] = array('price'=>$type_price,'stock'=>$rbfw_timely_available_quantity);
 				}
 
@@ -572,7 +548,9 @@
                 wp_die();
 			}
 
-			public function rbfw_bike_car_sd_frontend_scripts( $rbfw_post_id ) {
+
+
+            public function rbfw_bike_car_sd_frontend_scripts( $rbfw_post_id ) {
 				global $post;
 				$post_id = ! empty( $post->ID ) ? $post->ID : '';
 				if ( ! empty( $rbfw_post_id ) ) {

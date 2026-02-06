@@ -117,6 +117,18 @@ function rbfw_settings_sec_fields_basic( $default_fields ) {
             ),
 
             array(
+                'name' => 'rbfw_real_time_availability_display',
+                'label' => esc_html__( 'Real-time availability and Instant confirmation Display', 'booking-and-rental-manager-for-woocommerce' ),
+                'desc' => esc_html__( "If you want to display Real-time availability and Instant confirmation, then yes it.", 'booking-and-rental-manager-for-woocommerce' ),
+                'type' => 'select',
+                'default' => 'yes',
+                'options' => array(
+                    'yes' => 'Yes',
+                    'no'  => 'No'
+                )
+            ),
+
+            array(
                 'name' => 'want_loco_translate',
                 'label' => esc_html__( 'Want to use loco translate', 'booking-and-rental-manager-for-woocommerce' ),
                 'desc' => esc_html__( "If you want to change translation by using loco translate then yes it.", 'booking-and-rental-manager-for-woocommerce' ),
@@ -139,6 +151,24 @@ function rbfw_settings_sec_fields_basic( $default_fields ) {
                     'no'  => 'No'
                 )
             ),
+
+            array(
+                'name'    => 'inventory_managed_order_status',
+                'label'   => __( 'Inventory Managed Order Status', 'booking-and-rental-manager-for-woocommerce' ),
+                'desc'    => __( 'Please Select which order status Will be Managed Inventory', 'booking-and-rental-manager-for-woocommerce' ),
+                'type'    => 'multicheck',
+                'default' => array( 'processing' => 'processing', 'completed' => 'completed' ),
+                'options' => array(
+                    'on-hold'    => 'On Hold',
+                    'pending'    => 'Pending',
+                    'processing' => 'Processing',
+                    'completed'  => 'Completed'
+                    // 'cancelled'     => 'Cancelled'
+                )
+            ),
+
+
+
 
             array(
                 'name' => 'inventory_based_on_return',
@@ -164,9 +194,24 @@ function rbfw_settings_sec_fields_basic( $default_fields ) {
                 )
             ),
 
+            array(
+                'name' => 'pricing_display_for_listing',
+                'label' => esc_html__( 'Pricing display for listing', 'booking-and-rental-manager-for-woocommerce' ),
+                'desc' => esc_html__( "Pricing display for listing.", 'booking-and-rental-manager-for-woocommerce' ),
+                'type' => 'select',
+                'default' => 'hourly',
+                'options' => array(
+                    'hourly' => 'Hourly',
+                    'daily'  => 'Daily',
+                    'weekly'  => 'Weekly',
+                    'monthly'  => 'Monthly'
+                )
+            ),
+
+        ),
 
 
-		),
+
 		'rbfw_basic_style_settings' => array(
 			array(
 				'name'    => 'rbfw_rent_list_base_color',

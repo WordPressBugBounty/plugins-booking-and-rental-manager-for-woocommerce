@@ -25,6 +25,7 @@ WpRently provides you with the necessary features for free to start your rental 
 ###  Explore The Demo:
 
 🌐 [Live Demo](https://wprently.com/)
+🌐 [Backend Demo](https://app.instawp.io/launch?s=rentalplugin&d=v2)
 📘 [Online Documentation](https://www.wprently.com/docs/)
 🛍️ [Buy Booking and Rental Pro](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
 
@@ -45,9 +46,10 @@ WpRently provides you with the necessary features for free to start your rental 
 **🌡️ Medical Equipment:** Ideal for healthcare providers & medical equipment.
 **🔌 Electronics Goods:** Manage rentals for electronics goods.
 
+## LET'S SEE HOW IT WORKS
+https://www.youtube.com/watch?v=JK33WAWKo7E
 
-
-Let's dive deeper into the features list to ensure your system is optimized for maximum effectiveness.
+Let's dive deeper into the features list to ensure your system is optimised for maximum effectiveness.
 
 ## Free Version Of The Plugin Offers:
 
@@ -213,6 +215,44 @@ Learn more about how [Appsero collects and uses this data](https://appsero.com/p
 
 
 == Changelog ==
+
+2.6.1
+Vernulable issue solved.
+Translation updated.
+Location validation highlighted
+
+2.5.9
+Bug fixing.
+Validation checked.
+variation saving problem solved.
+
+2.5.8
+Vernulable issue solved.
+Calandar soldout problem solved.
+
+
+2.5.7
+Currency position problem solved.
+Decimal pricing calculation problem solved.
+Soldout problem solbed in single day.
+
+2.5.6
+Date language problem solved.
+Currency position problem solved.
+Category wise search updated.
+My accounct order pdf download problem solved and updated
+
+2.5.5
+Fee management option added.
+
+
+2.5.4
+Single day inventory problem solved.
+Vernulable issue solved.
+
+2.5.3
+Time slot for particular date problem solved.
+Buffer time option added.
 
 2.5.2
 Ajax request removed for time load depend on date.

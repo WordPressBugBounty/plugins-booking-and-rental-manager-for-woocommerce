@@ -171,26 +171,27 @@
 
         function rbfw_pick_date_from_flatpicker(){
 
+
             let today = new Date();
             let tomorrow = new Date();
             tomorrow.setDate(today.getDate() + 1); // Add 1 day to get tomorrow
             let todayFormatted = flatpickr.formatDate(today, "d-m-Y");
             let calendar = flatpickr(".rbfw_flatpicker", {
                 disableMobile: "true",
-                dateFormat: "d-m-Y",
+                dateFormat: rbfw_js_variables.timeFormat,
                 defaultDate: todayFormatted,
                 minDate: "today",
                 showMonths: 1,
                 onChange: function(selectedDates, dateStr, instance) {
                     if (selectedDates.length === 1) {
-                        let selectedDate = flatpickr.formatDate(selectedDates[0], "F j, Y");
+                        let selectedDate = flatpickr.formatDate(selectedDates[0], wp_date_format);
                         $("#rbfw_rent_item_search_pickup_date").val(selectedDate);
                     }
                 }
             });
 
             $("#rbfw_rent_item_search_pickup_date").on('focus', function (){
-                calendar.open();
+                //calendar.open();
             });
         }
 
@@ -310,7 +311,7 @@
                         });
 
                         $('#rbfw_shoe_result_text').html('<span >'+text_display+'</span>');
-                        $(".rbfw_left_filter_button").text('Filter');
+                        $(".rbfw_left_filter_button").text(rbfw_translation.filter);
                     }else{
                         alert('ok');
                         $('#rbfw_shoe_result_text').html('<div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">No Match Result Found!</div>');
@@ -470,7 +471,6 @@
                 type: [],
                 price: {},
                 title_text: '',
-
             };
             get_left_filter_data( get_filters );
             $("#rbfw_price_start").val('');
@@ -493,6 +493,12 @@
         $(this).next('.rbfw_faq_content_wrapper').toggleClass(' active');
         $(this).find('i').toggleClass('fa-plus fa-minus');
     });
+
+    rbfw_alphabetic_order($('#rbfw_toggle-content-categor'));
+    rbfw_alphabetic_order($('#rbfw_toggle_content_location'));
+    rbfw_alphabetic_order($('#rbfw_toggle_content_types'));
+    rbfw_alphabetic_order($('#rbfw_toggle_content_feature'));
+
 
 })(jQuery)
 
@@ -519,6 +525,29 @@ function rbfw_aig_plusSlides(n) {
 function rbfw_aig_currentSlide(n) {
     rbfw_aig_showSlides(slideIndex = n);
 }
+
+
+function rbfw_alphabetic_order(container){
+
+   // var container = jQuery('#rbfw_toggle-content-category');
+
+    var items = container.find('.rbfw_rent_item_left_feature_title').get();
+
+    items.sort(function (a, b) {
+        var textA = jQuery(a).find('span').text().toUpperCase();
+        var textB = jQuery(b).find('span').text().toUpperCase();
+
+        if (textA < textB) return -1;
+        if (textA > textB) return 1;
+        return 0;
+    });
+
+    jQuery.each(items, function (index, item) {
+        container.append(item);
+    });
+
+}
+
 
 function rbfw_aig_showSlides(n) {
     var i;
@@ -553,8 +582,24 @@ jQuery(document).ready(function($) {
         var $postContent = $this.closest('.rbfw_muff_post_content');
         $postContent.find('.trimmed-content').toggle();
         $postContent.find('.full-content').toggle();
-        
+
     });
 });
+
+jQuery(document).ready(function($){
+    $('.rbfw-book-now-btn').on('click', function(e){
+        var select = $('.rbfw-location .rbfw-select');
+
+        if(select.val() === ''){
+            select.css('border', '1px solid red');
+            //e.preventDefault(); // submit বন্ধ করবে
+        } else {
+            select.css('border', '');
+        }
+    });
+});
+
+
+
 
 
