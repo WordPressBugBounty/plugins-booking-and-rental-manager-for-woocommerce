@@ -108,6 +108,7 @@ if (!class_exists('RBFW_Woocommerce')) {
             if ( ! ( isset( $_POST['nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'rbfw_ajax_action' ) ) ) {
                 return;
             }
+
             $sd_input_data_sabitized = RBFW_Function::data_sanitize( $_POST );
             $rbfw_rent_type     = get_post_meta( $rbfw_id, 'rbfw_item_type', true );
 
@@ -1734,15 +1735,33 @@ if (!class_exists('RBFW_Woocommerce')) {
                 // Plugin-specific pricing logic
                 $mds_enabled = is_plugin_active('multi-day-price-saver-addon-for-wprently/additional-day-price.php');
                 $sp_enabled  = is_plugin_active('booking-and-rental-manager-seasonal-pricing/rent-seasonal-pricing.php');
+                $tp_enabled  = is_plugin_active('tiered-pricing-addon-wprently/tiered-pricing-addon.php');
 
                 $mds_data = get_post_meta($product_id, 'rbfw_resort_data_mds', true) ?: array();
                 $sp_data  = get_post_meta($product_id, 'rbfw_resort_data_sp', true) ?: array();
+                $tp_data  = get_post_meta($product_id, 'rbfw_resort_data_tp', true) ?: array();
 
                 if ($mds_enabled && !empty($mds_data)) {
                     $sp_price = check_seasonal_price_resort_mds($total_days, $mds_data, $room_type, $rbfw_room_price_category);
                     $unit_price = ($sp_price !== '0') ? (float)$sp_price : (float)$room_types[$room_type];
                     $room_price += $unit_price;
                     $total_room_price += $unit_price * $total_days * $quantity;
+
+                }elseif ($tp_enabled && !empty($tp_data)) {
+
+                    for($d = 0; $d < $total_days; $d++) {
+                        $tp_price = check_price_resort_tp($d, $tp_data, $room_type, $rbfw_room_price_category , $room_types[$room_type]);
+                        $room_price += (float)$tp_price;
+                    }
+                    $total_room_price += $room_price * $quantity;
+
+                   /* $book_dates = getAllDates($checkin_date, $checkout_date);
+                    for ($d = 0; $d < $total_days; $d++) {
+                        $sp_price = check_seasonal_price_resort($book_dates[$d], $sp_data, $room_type, $rbfw_room_price_category);
+                        $unit_price = ($sp_price !== 'not_found') ? (float)$sp_price : (float)$room_types[$room_type];
+                        $room_price += $unit_price;
+                    }
+                    $total_room_price += $room_price * $quantity;*/
 
                 } elseif ($sp_enabled && !empty($sp_data)) {
                     $book_dates = getAllDates($checkin_date, $checkout_date);

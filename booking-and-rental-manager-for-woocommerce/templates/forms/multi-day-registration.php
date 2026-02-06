@@ -123,6 +123,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                     <div class="item pricing-content-container">
                         <?php do_action('rbfw_pricing_info_header'); ?>
                         <div class="price-item-container">
+                            <span class="close-price-container"><i class="mi mi-x"></i></span>
                             <div class="mpStyle"  >
                                 <?php if($rbfw_enable_monthly_rate=='yes'){ ?>
                                     <div class="rbfw_day_wise_price">
@@ -267,6 +268,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                                     <?php } ?>
                                     <?php
                                     $rbfw_md_data_mds = get_post_meta( $post_id, 'rbfw_md_data_mds', true ) ? get_post_meta( $post_id, 'rbfw_md_data_mds', true ) : [];
+                                    $rbfw_tiered_pricing = get_post_meta($post_id, 'rbfw_tiered_pricing', true);
                                     if (is_plugin_active('multi-day-price-saver-addon-for-wprently/additional-day-price.php') && (!(empty($rbfw_md_data_mds)))) {
                                         foreach ($rbfw_md_data_mds as $item){
                                             ?>
@@ -294,8 +296,33 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                                                 </table>
                                             </div>
                                         <?php } ?>
-                                    <?php }else{
-                                        $seasonal_prices = [];
+                                    <?php }elseif(is_plugin_active('tiered-pricing-addon-wprently/tiered-pricing-addon.php') && (!(empty($rbfw_tiered_pricing)))){
+                                    foreach ($rbfw_tiered_pricing as $item){
+                                    ?>
+                                        <div class="mp_item_insert ">
+                                            <table>
+                                                <tbody>
+                                                <tr>
+                                                    <td>
+                                                        <?php esc_html_e( 'From', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                                                        <strong><?php echo esc_html($item['rbfw_start_day_tiered']) ?></strong>
+                                                        <?php esc_html_e( 'Days', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                                                        <?php esc_html_e( 'To', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                                                        <strong><?php echo esc_html($item['rbfw_end_day_tiered']) ?></strong>
+                                                        <?php esc_html_e( 'Days', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td>
+                                                        <strong><?php esc_html_e( 'Daily Rate:', 'booking-and-rental-manager-for-woocommerce' ); ?></strong><?php echo wc_price($item['rbfw_daily_price_tiered']) ?>
+                                                    </td>
+                                                </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    <?php } ?>
+                                    <?php } else{ ?>
+                                       <?php $seasonal_prices = [];
                                         if (is_plugin_active('booking-and-rental-manager-seasonal-pricing/rent-seasonal-pricing.php')){
                                             $seasonal_prices = get_post_meta( $post_id, 'rbfw_seasonal_prices', true ) ? get_post_meta( $post_id, 'rbfw_seasonal_prices', true ) : [];
                                         }
@@ -424,7 +451,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                                         <div class="rbfw-single-right-heading"><?php esc_html_e('Return Date','booking-and-rental-manager-for-woocommerce'); ?></div>
                                         <div class="rbfw-p-relative">
                                             <span class="calendar"><i class="fas fa-calendar-days"></i></span>
-                                            <?php if($referal_page == 'search'){ ?>
+                                            <?php if($referal_page == 'search'){  ?>
                                                 <input type="hidden" id="hidden_dropoff_date" value="<?php echo $rbfw_end_date ?>" name="rbfw_pickup_end_date">
                                                 <input class="rbfw-input rbfw-time-price dropoff_date" type="text" value="<?php echo rbfw_date_format($rbfw_end_date)  ?>" id="dropoff_date" placeholder="<?php esc_attr_e('Return date','booking-and-rental-manager-for-woocommerce'); ?>" required readonly="" <?php if($enable_hourly_rate == 'no'){ echo 'style="background-position: 95% center"'; }?>>
                                             <?php }else{ ?>
@@ -468,7 +495,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
 
 
                     <?php if ($rbfw_enable_md_type_item_qty == 'yes' && $item_stock_quantity > 0) { ?>
-                        <div class="item rbfw_quantity_md" style="display: none">
+                        <div class="item rbfw_quantity_md">
                             <div class="rbfw-single-right-heading">
                                 <?php esc_html_e('Quantity','booking-and-rental-manager-for-woocommerce'); ?>
                             </div>
@@ -490,7 +517,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                     <?php } ?>
 
                     <?php if($rbfw_enable_variations == 'yes' && !empty($rbfw_variations_data)){ ?>
-                        <div class="rbfw-variations-content-wrapper" style="display: none">
+                        <div class="rbfw-variations-content-wrapper">
                             <?php foreach ($rbfw_variations_data as $data_arr_one) {
                                 $selected_value = !empty($data_arr_one['selected_value']) ? $data_arr_one['selected_value'] : '';
                                 ?>
@@ -514,12 +541,17 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                     <?php } ?>
 
                     <?php
-                    $option_value  = get_post_meta($post_id, 'rbfw_service_category_price', true);
-                    $option_value  = is_serialized($option_value) ? unserialize($option_value) : $option_value;
+
+                    $rbfw_service_category_price  = get_post_meta($post_id, 'rbfw_service_category_price', true);
+
+                    if(!is_array($rbfw_service_category_price)){
+                        $rbfw_service_category_price  = json_decode($rbfw_service_category_price, true);
+                    }
+                    $option_value  = is_serialized($rbfw_service_category_price) ? unserialize($rbfw_service_category_price) : $rbfw_service_category_price;
                     ?>
 
                     <?php if (!empty($option_value) && $enable_service_price === 'on') { ?>
-                        <div class="multi-service-category-section" style="display: none">
+                        <div class="multi-service-category-section">
                             <?php foreach ($option_value as $cat => $item) { ?>
                                 <div class="servise-item">
                                     <div class="rbfw-single-right-heading"><?php echo esc_html($item['cat_title']); ?></div>
@@ -604,7 +636,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
 
 
                     <?php if(!empty($extra_service_list)){ ?>
-                        <div class="item rbfw_resourse_md" style="display: none">
+                        <div class="item rbfw_resourse_md">
                             <div class="rbfw-single-right-heading">
                                 <?php esc_html_e('Optional Add-ons','booking-and-rental-manager-for-woocommerce'); ?>
                             </div>
@@ -659,7 +691,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
 
                     <?php $rbfw_fee_data = get_post_meta( $post_id, 'rbfw_fee_data', true ); ?>
                     <?php if(!empty($rbfw_fee_data)){ ?>
-                        <div class="item rbfw_resourse_md" style="display: none">
+                        <div class="item rbfw_resourse_md">
                             <div class="rbfw-single-right-heading">
                                 <?php esc_html_e('Fee Management','booking-and-rental-manager-for-woocommerce'); ?>
                             </div>
@@ -734,11 +766,11 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                 </div>
 
 
-                <div class="rbfw_bikecarmd_price_result" style="display: none">
+                <div class="rbfw_bikecarmd_price_result">
                     <div class="item-content rbfw-costing">
                         <ul class="rbfw-ul">
 
-                            <li class="duration-costing rbfw-cond">
+                            <li class="duration-costing rbfw-cond" style="display: none">
                                 <span>
                                     <?php esc_html_e('Duration Cost','booking-and-rental-manager-for-woocommerce'); ?>
                                     <span class="rbfw_pricing_applied sessional">
@@ -816,25 +848,8 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                             }
                             $day_wise_imventory_1 = rbfw_day_wise_sold_out_check_by_month($post_id, $year, $month, $total_days_month);
                         }
-
-                        if ($i == 1) {
-                            $date = new DateTime("$year-$month-01");
-                            $date->modify('+1 month');
-                            $year = $date->format('Y');
-                            if($month == 12){
-                                $year = $year +1;
-                                $month = 1;
-                            }else{
-                                $month = $month + 1;
-                            }
-                            $total_days_month = 30;
-                            if (function_exists('cal_days_in_month')) {
-                                $total_days_month = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                            }
-                            $day_wise_imventory_2 = rbfw_day_wise_sold_out_check_by_month($post_id, $year, $month, $total_days_month);
-                        }
                     }
-                    $day_wise_imventory = wp_json_encode(array_merge($day_wise_imventory_1, $day_wise_imventory_2));
+                    $day_wise_imventory = wp_json_encode($day_wise_imventory_1);
                 }
 
             
@@ -872,7 +887,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
 
                 <?php if(rbfw_chk_regf_fields_exist($rbfw_id) === true){ ?>
                     <div class="item">
-                        <div class="rbfw_reg_form_rb" style="display: none">
+                        <div class="rbfw_reg_form_rb">
                             <?php
                             $reg_form = new Rbfw_Reg_Form();
                             echo wp_kses($reg_form->rbfw_generate_regf_fields($post_id),rbfw_allowed_html());

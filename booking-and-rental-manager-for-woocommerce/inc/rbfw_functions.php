@@ -2770,30 +2770,25 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
 
     list($rbfw_daily_rate, $rbfw_hourly_rate, $rbfw_sp_prices) = rbfw_get_initial_rates($post_id);
 
+    $rbfw_tiered_pricing = get_post_meta($post_id, 'rbfw_tiered_pricing', true);
+
     if (is_plugin_active('multi-day-price-saver-addon-for-wprently/additional-day-price.php') && !empty($rbfw_md_data_mds)) {
         $rbfw_hourly_threshold = get_post_meta( $post_id, 'rbfw_hourly_threshold', true );
         list($rbfw_daily_rate, $rbfw_hourly_rate, $rbfw_sp_prices) = rbfw_apply_multi_day_saver($total_days, $rbfw_md_data_mds, $rbfw_daily_rate, $rbfw_hourly_rate,$hours,$rbfw_hourly_threshold);
-    }
-
-    $rbfw_additional_day_prices = get_post_meta($post_id, 'rbfw_additional_day_prices', true);
-
-    if (is_plugin_active('multi-day-price-saver-addon-for-wprently/additional-day-price.php') && (!(empty($rbfw_additional_day_prices)))) {
-
-      /*  $rbfw_count_extra_day_enable = $rbfw->get_option_trans('rbfw_count_extra_day_enable', 'rbfw_basic_gen_settings', 'on');
-        if ($rbfw_count_extra_day_enable == 'on') {
-            $total_days = $total_days + 1;
-        }*/
-        for ($i = 1; $i < $total_days + 1; $i++) {
-            if ($multi_day_price_saver = check_multi_day_price_saver($i,$rbfw_additional_day_prices)) {
-                $rbfw_daily_rate =  $multi_day_price_saver;
-            }
-        }
     }
 
 
 
 
     for ($i = 0; $i < $total_days; $i++) {
+        if (!(is_plugin_active('multi-day-price-saver-addon-for-wprently/additional-day-price.php') && !empty($rbfw_md_data_mds)) && is_plugin_active('tiered-pricing-addon-wprently/tiered-pricing-addon.php') && (!(empty($rbfw_tiered_pricing)))) {
+            if ($rbfw_tiered_pricing_daily = check_rbfw_tiered_pricing($i, $rbfw_tiered_pricing)) {
+                $rbfw_daily_rate = $rbfw_tiered_pricing_daily;
+            }
+        }
+
+       // echo $rbfw_daily_rate;
+
         $day = strtolower(gmdate('D', strtotime("+$i day", strtotime($start_date))));
         $duration_price += rbfw_calculate_day_price(
             $i, $post_id, $Book_dates_array, $day, $start_date, $end_date, $pickup_datetime, $dropoff_datetime,
@@ -2832,19 +2827,16 @@ function rbfw_apply_multi_day_saver($total_days, $md_data, $default_daily, $defa
     }
 
 
-function rbfw_apply_tiered_pricing_addon($total_days, $md_data, $default_daily, $default_hourly, $hours,$rbfw_hourly_threshold) {
+function rbfw_apply_tiered_pricing($total_days, $rbfw_tiered_pricing, $default_daily, $default_hourly, $hours,$rbfw_hourly_threshold) {
 
-    if($hours && $hours <= $rbfw_hourly_threshold){
-        // $total_days--;
+        for ($i = 1; $i < $total_days + 1; $i++) {
+
+            if ($rbfw_tiered_pricing_daily = check_rbfw_tiered_pricing($i, $rbfw_tiered_pricing)) {
+                return $rbfw_tiered_pricing_daily;
+            }
+        }
+        return $default_daily;
     }
-    $md_saver = check_multi_day_price_saver_in_md($total_days, $md_data);
-    if (!empty($md_saver)) {
-        $daily = empty($md_saver[0]) ? $default_daily : $md_saver[0];
-        $hourly = empty($md_saver[1]) ? $default_hourly : $md_saver[1];
-        return [$daily, $hourly, ''];
-    }
-    return [$default_daily, $default_hourly, ''];
-}
 
 
 
@@ -3066,68 +3058,32 @@ function rbfw_get_half_day_rate($post_id, $day, $rbfw_half_day_rate, $seasonal_p
         return 'not_found';
 	}
 
-function check_seasonal_price_resort( $Book_date, $rbfw_sp_prices, $room_type = '' , $active_tab ='') {
 
 
 
-        foreach ( $rbfw_sp_prices as $rbfw_sp_price ) {
-            if(isset($rbfw_sp_price['start_date']) && isset($rbfw_sp_price['end_date'])){
-                $rbfw_sp_start_date = $rbfw_sp_price['start_date'];
-                $rbfw_sp_end_date   = $rbfw_sp_price['end_date'];
-                $sp_dates_array     = getAllDates( $rbfw_sp_start_date, $rbfw_sp_end_date );
-
-
-                if ( in_array( $Book_date, $sp_dates_array ) ) {
-                    foreach ($rbfw_sp_price['room_price'] as $room_price){
-                        if($room_type == $room_price['room_type']){
-
-                            set_transient("pricing_applied", "sessional", 3600);
-
-                            if($active_tab=='daylong'){
-                                return $room_price['day_long_price'];
-                            }else{
-                                return $room_price['price'];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    return 'not_found';
-}
 
 
 
-function check_seasonal_price_resort_mds( $day_number, $rbfw_sp_prices, $room_type = '' , $active_tab ='', $minStartDay = '') {
-        $price = 0;
-        foreach ($rbfw_sp_prices as $rbfw_sp_price) {
-            if ($day_number >= $rbfw_sp_price['start_day']) {
-                foreach ($rbfw_sp_price['room_price'] as $key=>$room_price){
-                    if($room_type == $room_price['room_type']){
-
-
-
-                        set_transient("pricing_applied", "mds", 3600);
-
-
-                        if($active_tab=='daylong'){
-                            $price = $room_price['day_long_price'];
-                        }else{
-                            $price = $room_price['price'];
-                        }
-                    }
-                }
-            } else {
-                break;
-            }
-        }
-        return $price;
-    }
 
 function check_multi_day_price_saver_in_md( $total_days, $rbfw_md_data_mds) {
     $price = [];
     foreach ($rbfw_md_data_mds as $single) {
         if ($total_days >= $single['rbfw_start_day']) {
+
+            set_transient("pricing_applied", "mds", 3600);
+
+            $price =  array($single['rbfw_daily_price'] , $single['rbfw_hourly_price']);
+        }
+    }
+    return $price;
+}
+
+function check_multi_day_tiered_pricing_in_md( $total_days, $rbfw_md_data_mds) {
+    $price = [];
+    foreach ($rbfw_md_data_mds as $single) {
+        $rbfw_start_day = $single['rbfw_start_day_tiered'];
+        $rbfw_end_day   = $single['rbfw_end_day_tiered'];
+        if ($day_number >= $rbfw_start_day  &&  $day_number <= $rbfw_end_day) {
 
             set_transient("pricing_applied", "mds", 3600);
 
@@ -3659,20 +3615,7 @@ function rbfw_restore_inventory_on_cancel( $rbfw_order_id ) {
 /**
  * Display pricing information header
  */
-add_action( 'rbfw_pricing_info_header', 'rbfw_pricing_info_header' );
-function rbfw_pricing_info_header(){
-	$info_display = rbfw_get_option('rbfw_pricing_info_display', 'rbfw_basic_gen_settings');
-	?>
-	<?php if ( $info_display == 'yes' ) : ?>
-	<div class="rbfw-pricing-info-heading">
-		<i class="fas fa-info-circle"></i> <?php esc_html_e('Pricing Info', 'booking-and-rental-manager-for-woocommerce'); ?>
-		<span class="pricing-info-view" title="click to see">
-			<?php _e('Click to view','booking-and-rental-manager-for-woocommerce') ?>
-		</span>
-	</div>
-	<?php endif; ?>
-	<?php
-}
+
 /**
  * Enqueue admin assets for RBFW reset orders functionality
  */

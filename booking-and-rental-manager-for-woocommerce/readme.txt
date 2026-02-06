@@ -24,7 +24,7 @@ WpRently provides you with the necessary features for free to start your rental 
 
 ###  Explore The Demo:
 
-🌐 [Live Demo](https://wprently.com/)
+🌐 [Frontend Live Demo](https://wprently.com/)
 🌐 [Backend Demo](https://app.instawp.io/launch?s=rentalplugin&d=v2)
 📘 [Online Documentation](https://www.wprently.com/docs/)
 🛍️ [Buy Booking and Rental Pro](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
@@ -215,6 +215,11 @@ Learn more about how [Appsero collects and uses this data](https://appsero.com/p
 
 
 == Changelog ==
+
+2.6.2
+Vernulable issue solved.
+Sold out problem solved.
+Bug fixing.
 
 2.6.1
 Vernulable issue solved.

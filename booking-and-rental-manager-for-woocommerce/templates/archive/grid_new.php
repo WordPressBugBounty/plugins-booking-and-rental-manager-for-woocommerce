@@ -41,7 +41,7 @@
 
         $pricing_display_for_listing = rbfw_get_option( 'pricing_display_for_listing', 'rbfw_basic_gen_settings' );
 
-
+        $price = 0;
 
         if ($rbfw_rent_type == 'bike_car_md') {
 
@@ -268,7 +268,7 @@
                 $price = $smallest_price;
             }
             $price_label = $prices_start_at;
-        } else{
+        } elseif ($rbfw_rent_type == 'multiple_items'){
 
             $multiple_items_info           = get_post_meta( $post_id, 'multiple_items_info', true ) ? get_post_meta( $post_id, 'multiple_items_info', true ) : [];
 
