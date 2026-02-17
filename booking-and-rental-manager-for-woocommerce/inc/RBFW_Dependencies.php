@@ -132,6 +132,9 @@ if (! class_exists('RBFW_Dependencies')) {
 				'nonce_faq_data_save'        => wp_create_nonce('rbfw_faq_data_save_action'),
 				'nonce_faq_delete_item'        => wp_create_nonce('rbfw_faq_delete_item_action'),
 				'nonce_faq_data_update'        => wp_create_nonce('rbfw_faq_data_update_action'),
+                'nonce_term_data_save'        => wp_create_nonce('rbfw_term_data_save_action'),
+                'nonce_term_delete_item'        => wp_create_nonce('rbfw_term_delete_item_action'),
+                'nonce_term_data_update'        => wp_create_nonce('rbfw_term_data_update_action'),
 			));
 
 			if (function_exists('rbfw_get_option')) {
@@ -206,6 +209,7 @@ if (! class_exists('RBFW_Dependencies')) {
 				'months' => __('Months', 'booking-and-rental-manager-for-woocommerce'),
 				'number_of' => __('Number of', 'booking-and-rental-manager-for-woocommerce'),
 				'duration' => __('Duration', 'booking-and-rental-manager-for-woocommerce'),
+				'pickup_dropoff_date' => __('Please enter pickup date and dropoff date', 'booking-and-rental-manager-for-woocommerce'),
 			));
 
 
