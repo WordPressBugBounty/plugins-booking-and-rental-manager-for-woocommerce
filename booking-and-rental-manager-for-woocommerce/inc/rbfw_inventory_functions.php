@@ -293,7 +293,10 @@ function rbfw_get_multiple_date_available_qty($post_id, $start_date, $end_date, 
                 }
 
                 $inventory_managed_order_status = rbfw_get_option('inventory_managed_order_status', 'rbfw_basic_gen_settings');
-                $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [];
+                $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [
+                    'processing' => 'processing',
+                    'completed'  => 'completed',
+                ];
                 $checkValues = $inventory['rbfw_order_status'];
 
 
@@ -634,14 +637,6 @@ function rbfw_day_wise_sold_out_check_by_month($post_id, $year,  $month, $total_
 
                     if ( (in_array($checkValues, $inventory_managed_order_status) || $inventory['rbfw_order_status'] == 'picked' || ($inventory_based_on_return == 'yes' && $inventory['rbfw_order_status'] == 'returned')) && $partial_stock) {
 
-                        if(isset($inventory['rbfw_start_date_ymd']) && isset($inventory['rbfw_end_date_ymd'])){
-                            $inventory_start_date = $inventory['rbfw_start_date_ymd'];
-                            $inventory_end_date = $inventory['rbfw_end_date_ymd'];
-                        }else{
-                            $booked_dates = !empty($inventory['booked_dates']) ? $inventory['booked_dates'] : [];
-                            $inventory_start_date = $booked_dates[0];
-                            $inventory_end_date = end($booked_dates);
-                        }
 
                         $booked_dates = $inventory['booked_dates'];
                         if($stock_manage_on_return_date=='no'){
@@ -885,7 +880,10 @@ function rbfw_check_available_by_specific_date_md($post_id, $specific_date = nul
             }
 
             $inventory_managed_order_status = rbfw_get_option('inventory_managed_order_status', 'rbfw_basic_gen_settings');
-            $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [];
+            $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [
+                'processing' => 'processing',
+                'completed'  => 'completed',
+            ];
 
             $checkValues = $inventory['rbfw_order_status'];
 
@@ -1003,7 +1001,10 @@ function rbfw_inventory_page_table($query, $date = null, $start_time = null, $en
                         }
 
                         $inventory_managed_order_status = rbfw_get_option('inventory_managed_order_status', 'rbfw_basic_gen_settings');
-                        $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [];
+                        $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [
+                            'processing' => 'processing',
+                            'completed'  => 'completed',
+                        ];
                         $checkValues = $inventory['rbfw_order_status'];
 
                         if ( in_array($current_date, $booked_dates) && (in_array($checkValues, $inventory_managed_order_status) || $inventory['rbfw_order_status'] == 'picked' || (($inventory_based_on_return=='yes')?$inventory['rbfw_order_status'] == 'returned':'')) && $partial_stock ){
@@ -1225,7 +1226,10 @@ function rbfw_get_stock_details(){
                         }
 
                         $inventory_managed_order_status = rbfw_get_option('inventory_managed_order_status', 'rbfw_basic_gen_settings');
-                        $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [];
+                        $inventory_managed_order_status = is_array($inventory_managed_order_status )?$inventory_managed_order_status : [
+                            'processing' => 'processing',
+                            'completed'  => 'completed',
+                        ];
                         $checkValues = $inventory['rbfw_order_status'];
 
                         if ( in_array($data_date, $inventory['booked_dates']) && (in_array($checkValues, $inventory_managed_order_status) || $inventory['rbfw_order_status'] == 'picked') && $partial_stock ){
