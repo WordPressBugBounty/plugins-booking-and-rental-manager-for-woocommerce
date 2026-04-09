@@ -227,7 +227,8 @@ jQuery('body').on('change', '#hidden_pickup_date, #hidden_dropoff_date, .pickup_
     }
 });
 
-
+jQuery('#pickup_date_search').readOnly = true;
+jQuery('#dropoff_date_search').readOnly = true;
 
 
 jQuery('body').on('change', '#rbfw_search_type', function (e) {
@@ -257,6 +258,8 @@ jQuery('body').on('change', '#rbfw_search_type', function (e) {
 
             jQuery('.rbfw_bike_car_md_item_wrapper').removeClass('rbfw_loader_in');
             jQuery('.rbfw_bike_car_md_item_wrapper i.fa-spinner').remove();
+            jQuery('#pickup_date_search').val('');
+            jQuery('#dropoff_date_search').val('');
 
         },
         error : function(response){

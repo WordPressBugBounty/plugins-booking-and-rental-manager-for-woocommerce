@@ -62,8 +62,10 @@ if( ! class_exists('RBFW_Custom_Post')){
 
             $cpt_label = $rbfw->get_name();
 
-
-            $cpt_slug         = $rbfw->get_slug();    
+            $cpt_slug         = sanitize_title( $rbfw->get_slug() );
+            if ( empty( $cpt_slug ) ) {
+                $cpt_slug = 'rent';
+            }
             $cpt_icon         = $rbfw->get_icon();
             $gutenburg_switch  = $rbfw->get_option_trans('rbfw_gutenburg_switch', 'rbfw_basic_gen_settings', 'on');
             if(isset($gutenburg_switch) && $gutenburg_switch == 'on'){
