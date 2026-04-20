@@ -108,11 +108,12 @@ if( ! class_exists('RBFW_Custom_Post')){
                     'show_in_nav_menus'     => false,
                     'labels'                => $labels,
                     'menu_icon'             => $cpt_icon,
+                    'has_archive'           => true, // Highly recommended for permalink stability   
+                    'publicly_queryable'    => true,                                     
                     'show_in_rest'          => $editor,
                     'supports'              => array('title', 'thumbnail', 'editor', 'excerpt', 'comments'),
                     'rewrite'               => array('slug' => $cpt_slug)
                 );
-
                 register_post_type('rbfw_item', $args);
 
 
