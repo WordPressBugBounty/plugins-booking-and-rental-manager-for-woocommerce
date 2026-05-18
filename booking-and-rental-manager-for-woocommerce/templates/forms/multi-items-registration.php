@@ -106,15 +106,27 @@ $available_qty_info_switch = get_post_meta($rbfw_id, 'rbfw_available_qty_info_sw
 
 $pricing_types           = get_post_meta( $post_id, 'pricing_types', true ) ? get_post_meta( $post_id, 'pricing_types', true ) : [];
 $multiple_items_info           = get_post_meta( $post_id, 'multiple_items_info', true ) ? get_post_meta( $post_id, 'multiple_items_info', true ) : [];
+$enabled_pricing_types = [];
+foreach ( [ 'hourly', 'daily', 'weekly', 'monthly' ] as $pricing_type ) {
+    if ( isset( $pricing_types[ $pricing_type ] ) && $pricing_types[ $pricing_type ] == 'on' ) {
+        $enabled_pricing_types[] = $pricing_type;
+    }
+}
+$auto_selected_pricing_type = count( $enabled_pricing_types ) === 1 ? current( $enabled_pricing_types ) : '';
 
 $rbfw_enable_security_deposit = get_post_meta($rbfw_id, 'rbfw_enable_security_deposit', true) ? get_post_meta($rbfw_id, 'rbfw_enable_security_deposit', true) : 'no';
 $rbfw_security_deposit_type = get_post_meta($rbfw_id, 'rbfw_security_deposit_type', true) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_type', true) : 'percentage';
 $rbfw_security_deposit_amount = get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) : 0;
+$rbfw_mi_hourly_to_half_day_pivot = get_post_meta($rbfw_id, 'rbfw_mi_hourly_to_half_day_pivot', true) ? get_post_meta($rbfw_id, 'rbfw_mi_hourly_to_half_day_pivot', true) : '';
+$rbfw_mi_half_day_to_daily_pivot = get_post_meta($rbfw_id, 'rbfw_mi_half_day_to_daily_pivot', true) ? get_post_meta($rbfw_id, 'rbfw_mi_half_day_to_daily_pivot', true) : '';
+$rbfw_mi_daily_to_weekly_pivot = get_post_meta($rbfw_id, 'rbfw_mi_daily_to_weekly_pivot', true) ? get_post_meta($rbfw_id, 'rbfw_mi_daily_to_weekly_pivot', true) : '';
+$rbfw_mi_weekly_to_monthly_pivot = get_post_meta($rbfw_id, 'rbfw_mi_weekly_to_monthly_pivot', true) ? get_post_meta($rbfw_id, 'rbfw_mi_weekly_to_monthly_pivot', true) : '';
 
 $rbfw_particular_switch = get_post_meta( $post_id, 'rbfw_particular_switch', true ) ? get_post_meta( $post_id, 'rbfw_particular_switch', true ) : 'off';
 $particulars_data = get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ? maybe_unserialize( get_post_meta( $rbfw_id, 'rbfw_particulars_data', true ) ) : [];
 $rdfw_available_time = get_post_meta( $rbfw_id, 'rdfw_available_time', true ) ? maybe_unserialize( get_post_meta( $rbfw_id, 'rdfw_available_time', true ) ) : [];
 $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_unserialize( get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ) : 0;
+$fee_management_cost_enable = false;
 
 
 ?>
@@ -188,9 +200,10 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                     <div class="pickup_date "></div>
 
                     <?php if ($location_switch == 'yes' && !empty($pickup_location)) : ?>
-                        <div class="item">
+                        <div class="item rbfw-mi-location-card">
                             <div class="rbfw-single-right-heading"><?php esc_html_e('Pickup Location','booking-and-rental-manager-for-woocommerce'); ?></div>
                             <div class="item-content rbfw-location">
+                                <span class="location-icon"><i class="fas fa-location-dot"></i></span>
                                 <select class="rbfw-select" name="rbfw_pickup_point" required>
                                     <option value=""><?php esc_html_e('Choose pickup location','booking-and-rental-manager-for-woocommerce'); ?></option>
                                     <?php foreach ($pickup_location as $pickup) : ?>
@@ -201,11 +214,12 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                         </div>
                     <?php endif; ?>
                     <?php if ($location_switch == 'yes' && !empty($dropoff_location)) : ?>
-                        <div class="item">
+                        <div class="item rbfw-mi-location-card">
                             <div class="rbfw-single-right-heading">
                                 <?php esc_html_e('Drop-off Location','booking-and-rental-manager-for-woocommerce'); ?>
                             </div>
                             <div class="item-content rbfw-location">
+                                <span class="location-icon"><i class="fas fa-location-dot"></i></span>
                                 <select class="rbfw-select" name="rbfw_dropoff_point" required>
                                     <option value=""><?php esc_html_e('Choose drop-off location','booking-and-rental-manager-for-woocommerce'); ?></option>
                                     <?php foreach ($dropoff_location as $dropoff) : ?>
@@ -224,7 +238,68 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                     <div class="rbfw_select_rental_period">
                         <div class="item">
                             <div class="item-content rbfw-datetime">
+                                <div class="left rbfw-duration-type-field">
+                                    <div class="rbfw-single-right-heading">
+                                        <?php esc_html_e('Rental Duration Type','booking-and-rental-manager-for-woocommerce'); ?>
+                                    </div>
+                                    <div class="rbfw-p-relative">
+                                        <select class="rbfw-select" name="durationType" id="durationType" required>
+                                            <?php if ( empty( $auto_selected_pricing_type ) ) { ?>
+                                                <option value=""><?php esc_html_e('Select duration type','booking-and-rental-manager-for-woocommerce'); ?></option>
+                                            <?php } ?>
 
+                                            <?php if(isset($pricing_types['hourly']) && $pricing_types['hourly']=='on'){ ?>
+                                                <option value="hourly" <?php selected( $auto_selected_pricing_type, 'hourly' ); ?>><?php esc_html_e('Hourly','booking-and-rental-manager-for-woocommerce'); ?></option>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['daily']) && $pricing_types['daily']=='on'){ ?>
+                                                <option value="daily" <?php selected( $auto_selected_pricing_type, 'daily' ); ?>><?php esc_html_e('Daily','booking-and-rental-manager-for-woocommerce'); ?></option>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['weekly']) && $pricing_types['weekly']=='on'){ ?>
+                                                <option value="weekly" <?php selected( $auto_selected_pricing_type, 'weekly' ); ?>><?php esc_html_e('Weekly','booking-and-rental-manager-for-woocommerce'); ?></option>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['monthly']) && $pricing_types['monthly']=='on'){ ?>
+                                                <option value="monthly" <?php selected( $auto_selected_pricing_type, 'monthly' ); ?>><?php esc_html_e('Monthly','booking-and-rental-manager-for-woocommerce'); ?></option>
+                                            <?php } ?>
+                                        </select>
+                                        <div class="rbfw-mi-duration-tabs" aria-label="<?php esc_attr_e('Rental Duration Type','booking-and-rental-manager-for-woocommerce'); ?>">
+                                            <?php if(isset($pricing_types['hourly']) && $pricing_types['hourly']=='on'){ ?>
+                                                <button type="button" class="rbfw-mi-duration-tab" data-duration-type="hourly"><?php esc_html_e('Hourly','booking-and-rental-manager-for-woocommerce'); ?></button>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['daily']) && $pricing_types['daily']=='on'){ ?>
+                                                <button type="button" class="rbfw-mi-duration-tab" data-duration-type="daily"><?php esc_html_e('Daily','booking-and-rental-manager-for-woocommerce'); ?></button>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['weekly']) && $pricing_types['weekly']=='on'){ ?>
+                                                <button type="button" class="rbfw-mi-duration-tab" data-duration-type="weekly"><?php esc_html_e('Weekly','booking-and-rental-manager-for-woocommerce'); ?></button>
+                                            <?php } ?>
+                                            <?php if(isset($pricing_types['monthly']) && $pricing_types['monthly']=='on'){ ?>
+                                                <button type="button" class="rbfw-mi-duration-tab" data-duration-type="monthly"><?php esc_html_e('Monthly','booking-and-rental-manager-for-woocommerce'); ?></button>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="right time rbfw-duration-qty-field">
+                                    <div class="rbfw-single-right-heading" id="qtyLabel" data-duration-label="<?php esc_attr_e('Rental Duration','booking-and-rental-manager-for-woocommerce'); ?>">
+                                        <?php esc_html_e('Rental Duration','booking-and-rental-manager-for-woocommerce'); ?>
+                                    </div>
+                                    <div class="rbfw-p-relative">
+                                        <span class="clock">
+                                            <i class="fa-regular fa-clock"></i>
+                                        </span>
+                                        <select class="rbfw-select" id="rbfw_mi_duration_qty_select">
+                                            <?php for ( $duration_qty = 1; $duration_qty <= 30; $duration_qty++ ) { ?>
+                                                <option value="<?php echo esc_attr( $duration_qty ); ?>"><?php echo esc_html( $duration_qty ); ?></option>
+                                            <?php } ?>
+                                        </select>
+                                        <span class="input-picker-icon"><i class="fas fa-chevron-down"></i></span>
+                                        <input type="hidden" id="durationQty" name="durationQty" class="qty-value" min="1" value="1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="item">
+                            <div class="item-content rbfw-datetime">
                                 <div class="<?php echo ($rbfw_enable_time_picker=='yes')?'left':'' ?> date">
                                     <div class="rbfw-single-right-heading">
                                         <?php esc_html_e('Pickup Date','booking-and-rental-manager-for-woocommerce'); ?>
@@ -260,49 +335,6 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                                     </div>
 
                                 <?php } ?>
-
-                            </div>
-                        </div>
-
-                        <div class="item">
-                            <div class="item-content rbfw-datetime">
-                                <div class="left">
-                                    <div class="rbfw-single-right-heading">
-                                        <?php esc_html_e('Duration Type','booking-and-rental-manager-for-woocommerce'); ?>
-                                    </div>
-                                    <div class="rbfw-p-relative">
-                                        <span class="calendar"><i class="fas fa-stopwatch"></i></span>
-                                        <select class="rbfw-select" name="durationType" id="durationType" required>
-                                            <option value=""><?php esc_html_e('Select duration type','booking-and-rental-manager-for-woocommerce'); ?></option>
-
-                                            <?php if(isset($pricing_types['hourly']) && $pricing_types['hourly']=='on'){ ?>
-                                                <option value="hourly"><?php esc_html_e('Hourly','booking-and-rental-manager-for-woocommerce'); ?></option>
-                                            <?php } ?>
-                                            <?php if(isset($pricing_types['daily']) && $pricing_types['daily']=='on'){ ?>
-                                                <option value="daily"><?php esc_html_e('Daily','booking-and-rental-manager-for-woocommerce'); ?></option>
-                                            <?php } ?>
-                                            <?php if(isset($pricing_types['weekly']) && $pricing_types['weekly']=='on'){ ?>
-                                                <option value="weekly"><?php esc_html_e('Weekly','booking-and-rental-manager-for-woocommerce'); ?></option>
-                                            <?php } ?>
-                                            <?php if(isset($pricing_types['monthly']) && $pricing_types['monthly']=='on'){ ?>
-                                                <option value="monthly"><?php esc_html_e('Monthly','booking-and-rental-manager-for-woocommerce'); ?></option>
-                                            <?php } ?>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="right time">
-                                    <div class="rbfw-single-right-heading" id="qtyLabel">
-                                        <?php esc_html_e('Number of Duration','booking-and-rental-manager-for-woocommerce'); ?>
-                                    </div>
-                                    <div class="rbfw-p-relative">
-                                        <div class="qty-input rbfw_qty_input">
-                                            <a type="button" class="qty-btn rbfw_qty_minus" onclick="changeQty('durationQty', -1)">−</a>
-                                            <input type="number" id="durationQty" name="durationQty" class="qty-value" min="1" value="1" readonly>
-                                            <a type="button" class="qty-btn rbfw_qty_plus" onclick="changeQty('durationQty', 1)">+</a>
-                                        </div>
-                                    </div>
-                                </div>
 
                             </div>
                         </div>
@@ -376,8 +408,6 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                             <?php
 
                             $rbfw_fee_data = get_post_meta( $post_id, 'rbfw_fee_data', true );
-                            $fee_management_cost_enable = false;
-
                             ?>
                             <?php if(!empty($rbfw_fee_data)){ ?>
                                 <div class="item rbfw_resourse_md">
@@ -578,6 +608,10 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
                 <input type="hidden" name="rbfw_security_deposit_enable" id="rbfw_security_deposit_enable"  value="<?php echo esc_attr($rbfw_enable_security_deposit); ?>">
                 <input type="hidden" name="rbfw_security_deposit_type" id="rbfw_security_deposit_type"  value="<?php echo esc_attr($rbfw_security_deposit_type); ?>">
                 <input type="hidden" name="rbfw_security_deposit_amount" id="rbfw_security_deposit_amount"  value="<?php echo esc_attr($rbfw_security_deposit_amount); ?>">
+                <input type="hidden" id="rbfw_mi_hourly_to_half_day_pivot" value="<?php echo esc_attr($rbfw_mi_hourly_to_half_day_pivot); ?>">
+                <input type="hidden" id="rbfw_mi_half_day_to_daily_pivot" value="<?php echo esc_attr($rbfw_mi_half_day_to_daily_pivot); ?>">
+                <input type="hidden" id="rbfw_mi_daily_to_weekly_pivot" value="<?php echo esc_attr($rbfw_mi_daily_to_weekly_pivot); ?>">
+                <input type="hidden" id="rbfw_mi_weekly_to_monthly_pivot" value="<?php echo esc_attr($rbfw_mi_weekly_to_monthly_pivot); ?>">
 
 
 
@@ -637,5 +671,6 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? maybe_
         </form>
     </div>
 </div>
+
 
 

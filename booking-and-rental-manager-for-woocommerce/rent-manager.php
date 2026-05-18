@@ -3,7 +3,7 @@
 	 * Plugin Name: Booking and Rental Manager for Bike | Car | Resort | Appointment | Dress | Equipment
 	 * Plugin URI: https://mage-people.com
 	 * Description: A complete booking & rental solution for WordPress.
-	 * Version: 2.6.9
+	 * Version: 2.7.0
 	 * Author: MagePeople Team
 	 * Author URI: https://www.mage-people.com/
 	 * Text Domain: booking-and-rental-manager-for-woocommerce
@@ -20,9 +20,6 @@
 		 *
 		 * This class serves as the main entry point for the Rent Manager plugin.
 		 *
-		 * @author Sahahdat <raselsha@gmail.com>
-		 * @version 1.0.0
-		 * @since 2.1.1
 		 *
 		 */
 		final class RBFW_Rent_Manager {
@@ -44,10 +41,10 @@
 					add_action( 'admin_init', [ $this, 'flush_rules_rbfw_post_list_page' ] );
 				}
 				require_once RBFW_PLUGIN_DIR . '/admin/RBFW_Hidden_Product.php';
-				require_once RBFW_PLUGIN_DIR . '/admin/RBFW_Quick_Setup.php';
+				require_once RBFW_PLUGIN_DIR . '/inc/RBFW_Woo_Installer.php';
 				require_once RBFW_PLUGIN_DIR . '/inc/rbfw_import_demo.php';
-				
-				add_action( 'admin_init', [ $this, 'activation_redirect' ], 90 );
+				// Create default pages (Rent List, Grid, Search)
+				add_action( 'admin_init', 'rbfw_page_create', 20 );
 			}
 
 			public function define_contstants() {
@@ -115,30 +112,23 @@
 				if ( ! empty( $_POST['post_type'] ) && sanitize_text_field( wp_unslash( $_POST['post_type'] ) ) != 'rbfw_item' ) {
 					return;
 				}
-				flush_rewrite_rules(); 
+				flush_rewrite_rules();
 			}
 
 			function flush_rules_rbfw_post_list_page() {
-				
+
 				// if ( ! ( isset( $_POST['nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'rbfw_ajax_action' ) ) ) {
 				// 	return;
 				// }
 
 				if ( isset( $_GET['post_type'] ) && sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) == 'rbfw_item' ) {
-					flush_rewrite_rules(); 
+					flush_rewrite_rules();
 				}
 			}
 
-			public function activation_redirect( $plugin ) {
-
-				$rbfw_quick_setup_done = get_option( 'rbfw_quick_setup_done' ) ? get_option( 'rbfw_quick_setup_done' ) : 'no';
-				$first_redirect = get_option( 'first_redirect' ) ? get_option( 'first_redirect' ) : 'no';
-
-				if ( $rbfw_quick_setup_done == 'no' && $first_redirect == 'no' ) {						
-						wp_redirect( esc_url_raw( admin_url( 'edit.php?post_type=rbfw_item&page=rbfw_quick_setup' ) ) );
-						update_option( 'first_redirect', 'yes' );
-						exit();
-				}
+			public function activation_redirect() {
+				// RBFW_Woo_Installer handles activation redirect via transient.
+				// This method is kept for backward compatibility – no-op now.
 			}
 
 			public static function get_plugin_data( $data ) {
@@ -149,7 +139,7 @@
 			}
 
 			public static function activate() {
-				// rbfw_activation_redirect();
+				set_transient( 'rbfw_plugin_activated', true, 30 );
 				flush_rewrite_rules();
 				rbfw_update_settings();
 			}

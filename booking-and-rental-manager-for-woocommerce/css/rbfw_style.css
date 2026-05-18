@@ -18,7 +18,7 @@ RBFW TAB
 h1, h2, h3, h4, h5, h6 {
     font-family: inherit;
     font-weight: 600;
-    margin-top: 0 !important;
+    margin-top: 0;
 }
 
 
@@ -536,7 +536,7 @@ CSS for Single Page Template
 
 div.mp_right_section {
     border: 1px solid #f5f5f5;
-    border-radius: 12px;
+    border-radius: 8px;
     background: #fff;
     position: sticky;
     top: 25px;
@@ -547,14 +547,14 @@ div.mp_right_section {
     background: linear-gradient(135deg, var(--rbfw_color_primary) 0%, var(--rbfw_color_primary) 100%);
     padding: 10px;
     color:#fff;
-    border-radius: 12px  12px 0 0;
+    border-radius: 8px 8px 0 0;
     text-align: center;
 }
 .rbfw-booking-header h1{
     color:#fff;
     font-size: 22px;
     font-weight: 700;
-    letter-spacing: -0.025em;
+    letter-spacing: 0;
     margin: 0;
 }
 .rbfw-booking-header .sub-title{
@@ -1877,7 +1877,7 @@ table.rbfw_room_cart_table th span {
 .rbfw_rent_list_inner_wrapper {
     background-color: #fff;
     border: 1px solid #d3d3d3;
-    border-radius: 0px;
+    border-radius: 15px;
     overflow: hidden;
 }
 
@@ -1943,7 +1943,7 @@ table.rbfw_room_cart_table th span {
 
 .rbfw_rent_list_style_grid .rbfw_rent_list_inner_wrapper {
     border: 1px solid #d0d7de;
-    border-radius:5px;
+    border-radius: 15px;
     height: 100%;
 }
 
@@ -6701,7 +6701,7 @@ ul, li {
     overflow: hidden;
     width: 100%;
     height: auto;
-    /*min-height: 255px;*/
+    min-height: 220px;
 }
 .rbfw_rent_list_grid_view_top_img1 {
     display: block;
@@ -6716,15 +6716,14 @@ ul, li {
 
 .rbfw_rent_list_style_list .rbfw_rent_list_grid_view_top_img {
     height: 265px;
-    margin: 20px 5px 5px 5px;
 }
 
 
 .rbfw_rent_list_grid_view_top_img img {
     width: 100%;
     height: 100%;
-    max-height:280px;
-    object-fit: contain;
+    max-height:224px;
+    object-fit: cover;
     display: block;
     transition: all 0.5s ease-in-out;
 }
@@ -6737,7 +6736,7 @@ ul, li {
 
 .rbfw_inner_details {
     border-top-width: 0;
-    padding: 15px 20px 20px;
+    padding: 15px;
     flex: 2;
     display: flex;
     flex-direction: column;
@@ -6751,34 +6750,30 @@ ul, li {
 }
 
 .rbfw_rent_list_content {
-    padding-bottom: 15px;
-    margin-bottom: 15px;
-    border-bottom: 1px solid #d0d7de;
     height: max-content;
 }
 
 h2.rbfw_rent_list_grid_title {
-    line-height: 20px;
+
 }
 h2.rbfw_rent_list_grid_title a{
     text-decoration: none !important;
 }
 
-.rbfw_rent_list_grid_title {
+h2.rbfw_rent_list_grid_title {
     font-weight: normal;
-    font-size: 18px;
-    line-height: 1.2;
+    font-size: 16px;
     text-transform: capitalize;
     color: #202020;
-    min-height: 52px;
-    margin-bottom: 15px;
-    margin-top: 0 !important;
+    min-height:25px;
+    margin: 0 0 25px 0;
 }
 
 .rbfw_rent_list_grid_title a {
     color: #202020;
     text-decoration: none;
     font-size: 18px;
+    font-weight: 600;
 }
 
 .rbfw_rent_list_style_list .rbfw_rent_list_grid_title {
@@ -6792,9 +6787,9 @@ h2.rbfw_rent_list_grid_title a{
 }
 
 .rbfw_rent_list_grid_row {
-    display: inline-flex;
-    align-items: flex-end;
-    flex-wrap: wrap;
+    display: flex;
+    flex-direction: column;
+    justify-content: start;
     gap: 4px;
 }
 
@@ -6809,38 +6804,17 @@ h2.rbfw_rent_list_grid_title a{
 }
 
 .rbfw_rent_list_style_list .rbfw_pricing-box {
-    padding: 5px 15px;
-    background: var(--rbfw_color_primary);
-    color: #fff;
-    font-weight: 600;
-}
-
-@media (min-width: 992px) {
-    .rbfw_rent_list_style_list .rbfw_pricing-box {
-        min-width: 180px;
-        text-align: center;
-        justify-content: center;
-    }
-}
-
-@media (max-width: 991px) {
-    .rbfw_rent_list_style_list .rbfw_pricing-box {
-        margin-top: 15px;
-    }
-}
-
-.rbfw_rent_list_style_list .rbfw_pricing-box .rbfw_rent_list_row_price_level {
-    color: #fff;
-    font-weight: 400;
-}
-
-.rbfw_rent_list_style_grid .rbfw_rent_list_row_price {
-    font-weight: 600;
-    font-size: 28px;
-    letter-spacing: -1px;
-    text-transform: capitalize;
     color: var(--rbfw_color_primary);
-    line-height: 1;
+    font-weight: 600;
+}
+
+
+
+.rbfw_rent_list_row_price {
+    font-weight: 700;
+    font-size: 24px;
+    color: var(--rbfw_color_primary);
+    line-height: .80;
     margin: 0;
 }
 
@@ -6851,7 +6825,7 @@ h2.rbfw_rent_list_grid_title a{
     column-gap: 15px;
     row-gap: 5px;
     line-height: 1.6;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
     margin-left: 0;
     padding-left: 0;
 }
@@ -6880,16 +6854,21 @@ h2.rbfw_rent_list_grid_title a{
     color: var(--rbfw_color_primary);
 }
 
-.rbfw_rent_list_info li {
+.rbfw_rent_list_info{
     color: #0a0a0a;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    gap: 8px;
 }
 
 .bfw_rent_list_items {
     position: relative;
-    display: flex;
-    align-items: baseline;
-    gap: 5px;
-    text-align: left;
+    border-radius: 50px;
+    background: #eceef2;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
 }
 
 .bfw_rent_list_items .bfw_rent_list_items_icon {
@@ -6904,9 +6883,8 @@ h2.rbfw_rent_list_grid_title a{
     align-items: center;
     gap: 3px;
     position: relative;
-    padding: 5px 30px;
+    padding:10px 20px;
     transition: all 0.3s ease-in-out;
-    z-index: 2;
     background: var(--rbfw_color_primary);
     color: #fff;
     border-radius: 2px;
@@ -7108,7 +7086,6 @@ div.rbfw_day_wise_price td, div.rbfw_seasonal_price_info td {
     background-color: #f9fafb;
 }
 .rbfw_service_type .radio-button::before{
-    position: absolute;
     content: "";
     width: 15px;
     height: 15px;
@@ -7186,6 +7163,126 @@ div.rbfw_day_wise_price td, div.rbfw_seasonal_price_info td {
     background-color: #007bff;
     color: white;
     border-radius: 5px;
+}
+
+/* Single day timely booking sidebar */
+.mp_right_section .single-day-booking .rbfw-single-right-container {
+    width: 100%;
+}
+
+.mp_right_section .single-day-booking .mp_rbfw_ticket_form > .item,
+.mp_right_section .single-day-booking .mp_rbfw_ticket_form > label.rbfw-single-right-heading {
+    margin-bottom: 14px;
+}
+
+.mp_right_section .single-day-booking .rbfw-single-right-heading {
+    display: block;
+    margin: 0 0 8px;
+    color: #111827;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+.mp_right_section .single-day-booking .rbfw-select,
+.mp_right_section .single-day-booking .rbfw-input {
+    min-height: 42px;
+    border: 1px solid #d7d7d7;
+    border-radius: 5px;
+    background-color: #fff;
+    color: #111827;
+    font-size: 14px;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    width: 100%;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button {
+    position: relative;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 12px;
+    border: 1px solid #d9d9d9;
+    border-radius: 5px;
+    background: #f8f9fb;
+    color: #111827;
+    text-align: left;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button::before {
+    position: static;
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    border: 1px solid #9ca3af;
+    background: #fff;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button.selected::before {
+    border: 5px solid var(--rbfw_color_primary);
+    background: #fff;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button label {
+    min-width: 0;
+    margin: 0;
+    cursor: pointer;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button .rent-type {
+    display: block;
+    overflow-wrap: anywhere;
+    color: #1f2937;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button .rbfw_time {
+    margin-top: 2px;
+    color: #4b5563;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button .price {
+    white-space: nowrap;
+    color: #111827;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button:hover,
+.mp_right_section .single-day-booking .rbfw_service_type .radio-button.selected {
+    border-color: var(--rbfw_color_primary);
+    background: #fff7f5;
+}
+
+.mp_right_section .single-day-booking .rbfw-bikecarsd-calendar-header {
+    margin-top: 10px;
+    margin-bottom: 0;
+    padding: 8px 10px;
+    border: 1px solid #cfeede;
+    border-radius: 5px;
+    background: #ecfdf5;
+}
+
+.mp_right_section .single-day-booking .rbfw-bikecarsd-calendar-header-feature {
+    color: #374151;
+    font-size: 15px;
+    line-height: 24px;
+}
+
+.mp_right_section .single-day-booking .rbfw-bikecarsd-calendar-header-feature i {
+    color: var(--rbfw_color_primary);
 }
 
 
@@ -7318,6 +7415,9 @@ select#rbfw_variation_id_0,select#rbfw_variation_id_1,select#rbfw_variation_id_2
     border: 1px solid #dedede;
     background: #f5f5f5;
 }
+.rbfw-variations-content-wrapper {
+    margin-bottom: 16px;
+}
 .item.rbfw_bikecarsd_price_summary {
     margin-top: 8px; 
 }
@@ -7412,13 +7512,319 @@ i.fas.fa-minus {
         width: 500px;
     }
 }
-.rbfw_multi_items_right .rbfw_select_rental_period
- {
-    padding: 10px;
-    border: 1px solid #ddd;
-    background: #f8f8f8;
-    border-radius: 5px;
-    margin-bottom: 10px;
+.rbfw_multi_items_right .rbfw_select_rental_period {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    display: grid;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-booking-form {
+    background: #fff;
+    border: 1px solid #e1e7f0;
+    border-radius: 4px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    padding: 26px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .item,
+.rbfw_multi_items_right .rbfw-mi-location-card,
+.rbfw_multi_items_right .rbfw_resourse_md,
+.rbfw_multi_items_right .multi-service-category-section .servise-item {
+    background: #eef6ff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    margin: 0;
+    padding: 18px;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card {
+    margin-bottom: 16px;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card .rbfw-single-right-heading {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0 0 8px;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card .rbfw-location {
+    border: 0;
+    margin: 0;
+    position: relative;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card .location-icon {
+    align-items: center;
+    color: #0058b8;
+    display: flex;
+    font-size: 17px;
+    height: 48px;
+    justify-content: center;
+    left: 14px;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    width: 20px;
+    z-index: 1;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card .rbfw-location::after {
+    color: #64748b;
+    content: "\f078";
+    font-family: "Font Awesome 6 Free";
+    font-size: 12px;
+    font-weight: 900;
+    pointer-events: none;
+    position: absolute;
+    right: 16px;
+    top: 16px;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card select.rbfw-select {
+    appearance: none;
+    background: #fff;
+    border: 1px solid #d7e0ec;
+    border-radius: 2px;
+    color: #111827;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    height: 48px;
+    line-height: 48px;
+    margin: 0;
+    padding: 0 42px;
+    width: 100%;
+}
+
+.rbfw_multi_items_right .rbfw-mi-location-card select.rbfw-select:focus {
+    border-color: var(--rbfw_color_primary);
+    box-shadow: 0 0 0 3px rgba(255, 48, 48, 0.12);
+    outline: 0;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .item {
+    margin: 0;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .item + .item {
+    margin-top: 16px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime {
+    align-items: start;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-duration-type-field,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-duration-qty-field {
+    grid-column: 1 / -1;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-duration-qty-field {
+    margin-top: 14px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime .date,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime .left,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime .right {
+    align-self: start;
+    margin: 0;
+    width: 100%;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .date .rbfw-single-right-heading,
+.rbfw_multi_items_right .rbfw_select_rental_period .time:not(.rbfw-duration-qty-field) .rbfw-single-right-heading {
+    min-height: 20px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-single-right-heading {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+    margin: 0 0 8px;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-p-relative {
+    position: relative;
+}
+
+.rbfw_multi_items_right #durationType {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.rbfw_multi_items_right .rbfw-mi-duration-tabs {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+}
+
+.rbfw_multi_items_right .rbfw-mi-duration-tab {
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 2px;
+    color: #111827;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 48px;
+    padding: 0 10px;
+    transition: border-color .18s ease, box-shadow .18s ease, color .18s ease;
+}
+
+.rbfw_multi_items_right .rbfw-mi-duration-tab.active,
+.rbfw_multi_items_right .rbfw-mi-duration-tab:hover {
+    border-color: #0058b8;
+    box-shadow: inset 0 0 0 1px #0058b8;
+    color: #0058b8;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime select,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime select.rbfw-select,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime input[type=text].rbfw-input {
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 2px;
+    box-shadow: none;
+    color: #111827;
+    font-size: 14px;
+    font-weight: 500;
+    height: 48px;
+    line-height: 48px;
+    margin: 0;
+    padding: 0 38px 0 42px;
+    transition: border-color .18s ease, box-shadow .18s ease;
+    width: 100%;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime select:focus,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime input[type=text].rbfw-input:focus {
+    border-color: var(--rbfw_color_primary);
+    box-shadow: 0 0 0 3px rgba(255, 48, 48, 0.12);
+    outline: 0;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime .calendar,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime .time .clock {
+    align-items: center;
+    color: #6b7280;
+    display: flex;
+    font-size: 18px;
+    height: 48px;
+    justify-content: center;
+    left: 12px;
+    padding: 0;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    transform: none;
+    width: 22px;
+    z-index: 1;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .date .rbfw-p-relative,
+.rbfw_multi_items_right .rbfw_select_rental_period .time:not(.rbfw-duration-qty-field) .rbfw-p-relative {
+    background: #fff;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .date input[type=text].rbfw-input,
+.rbfw_multi_items_right .rbfw_select_rental_period .time:not(.rbfw-duration-qty-field) select.rbfw-select {
+    border-color: #d7e0ec;
+    color: #111827;
+    font-size: 15px;
+    font-weight: 500;
+    min-height: 48px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .date .calendar,
+.rbfw_multi_items_right .rbfw_select_rental_period .time:not(.rbfw-duration-qty-field) .clock {
+    color: #0058b8;
+    font-size: 17px;
+    left: 14px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .date .input-picker-icon {
+    color: #64748b;
+    right: 14px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .time:not(.rbfw-duration-qty-field) .input-picker-icon::before {
+    color: #64748b;
+    content: "\f078";
+    font-family: "Font Awesome 6 Free";
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .input-picker-icon {
+    align-items: center;
+    color: #111827;
+    display: flex;
+    height: 48px;
+    justify-content: center;
+    pointer-events: none;
+    position: absolute;
+    right: 12px;
+    top: 0;
+    width: 16px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw_qty_input {
+    align-items: center;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: 40px 58px 40px;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw_qty_input a,
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw_qty_input input[type="number"] {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 2px;
+    color: #4b5563;
+    display: flex;
+    font-size: 16px;
+    font-weight: 500;
+    height: 48px;
+    justify-content: center;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw_qty_input input[type="number"] {
+    color: #111827;
+}
+
+.rbfw_multi_items_right .rbfw_select_rental_period .rbfw_qty_input a:hover {
+    background: var(--rbfw_color_primary);
+    border-color: var(--rbfw_color_primary);
+    color: #fff;
+}
+
+@media only screen and (max-width: 600px) {
+    .rbfw_multi_items_right .rbfw_select_rental_period .rbfw-datetime {
+        grid-template-columns: 1fr;
+    }
 }
 
 .rbfw_multi_items_right .rbfw_rental_pricing_rates {
@@ -7426,6 +7832,82 @@ i.fas.fa-minus {
     padding: 20px;
     border-radius: 10px;
     margin-top: 10px;
+}
+
+.rbfw_multi_items_right .rbfw_rental_pricing_breakdown {
+    border-top: 1px solid #eef2f7;
+    margin-top: 22px;
+    padding-top: 18px;
+}
+
+.rbfw_multi_items_right .rbfw_bikecarmd_price_result {
+    background: transparent;
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-costing {
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-costing .rbfw-single-right-heading {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-costing ul {
+    margin: 0;
+    padding: 0;
+}
+
+.rbfw_multi_items_right .rbfw-costing ul li {
+    color: #4b5563;
+    display: flex;
+    font-size: 14px;
+    justify-content: space-between;
+    margin: 0 0 10px;
+}
+
+.rbfw_multi_items_right .rbfw-costing ul li.total {
+    align-items: baseline;
+    border-top: 1px solid #eef2f7;
+    color: #111827;
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 16px;
+    padding-top: 16px;
+}
+
+.rbfw_multi_items_right .rbfw-costing ul li.total .price-figure {
+    color: #0058b8;
+    font-size: 28px;
+    font-weight: 800;
+}
+
+.rbfw_multi_items_right .rbfw_bikecarmd_book_now_btn,
+.rbfw_multi_items_right button.rbfw_bikecarmd_book_now_btn {
+    background: #005fc8 !important;
+    border: 0 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 10px 22px rgba(0, 95, 200, 0.22);
+    color: #fff !important;
+    display: flex !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    justify-content: center;
+    min-height: 56px;
+    width: 100%;
+}
+
+.rbfw_multi_items_right .rbfw_bikecarmd_book_now_btn:hover,
+.rbfw_multi_items_right button.rbfw_bikecarmd_book_now_btn:hover {
+    background: #004fa8 !important;
 }
 
 .rbfw_multi_items_right .rbfw_bikecarmd_es_table tr {
@@ -7448,15 +7930,115 @@ i.fas.fa-minus {
     margin-top:7px;
 }
 
+.rbfw_multi_items_right .rbfw_bikecarmd_es_table {
+    display: grid;
+    gap: 0;
+}
+
 .rbfw_bikecarmd_es_table .rbfw-resource-item{
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 10px;
-    background: #f5f7fa;
-    border:1px solid #dce3ea;
-    margin-bottom: 5px;
-    border-radius: 5px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #dfe8f4;
+    border-radius: 0;
+    box-shadow: none;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    margin-bottom: 0;
+    padding: 13px 0;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.rbfw_bikecarmd_es_table .rbfw-resource-item:last-child {
+    border-bottom: 0;
+}
+
+.rbfw_bikecarmd_es_table .rbfw-resource-item:hover {
+    border-color: #cbd5e1;
+    box-shadow: none;
+    transform: none;
+}
+
+.rbfw_bikecarmd_es_table .resource-title-qty {
+    color: #111827;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    min-width: 0;
+}
+
+.rbfw_bikecarmd_es_table .resource-title-qty .item-price {
+    color: #64748b;
+    font-size: 12px !important;
+    font-weight: 500;
+    line-height: 1.35;
+    margin-top: 3px;
+}
+
+.rbfw_bikecarmd_es_table .resource-qty {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #64748b;
+    display: inline-flex;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+    padding: 5px 9px;
+    white-space: nowrap;
+}
+
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input {
+    align-items: center;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: 36px 50px 36px;
+}
+
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input a,
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input input[type="number"] {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 2px;
+    color: #475569;
+    display: flex;
+    font-size: 14px;
+    font-weight: 600;
+    height: 40px;
+    justify-content: center;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+}
+
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input input[type="number"] {
+    color: #111827;
+    font-size: 15px;
+}
+
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input a:hover {
+    background: var(--rbfw_color_primary);
+    border-color: var(--rbfw_color_primary);
+    color: #fff;
+}
+
+.rbfw_bikecarmd_es_table .rbfw_multi_items_input_box .rbfw_qty_input a:hover i {
+    color: #fff;
+}
+
+@media only screen and (max-width: 520px) {
+    .rbfw_bikecarmd_es_table .rbfw-resource-item {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .rbfw_bikecarmd_es_table .rbfw-resource-item > div:nth-child(2) {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
 }
 
 .rbfw-costing .rbfw-single-right-heading{

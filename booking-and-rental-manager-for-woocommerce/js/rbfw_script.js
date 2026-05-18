@@ -262,14 +262,14 @@
 
 //Left Filtering
         $('.rbfw_toggle-content').show();
-        $('.rbfw_toggle-icon').on('click', function() {
+        $('.rbfw_toggle-header').on('click', function() {
             var content = $(this).next('.rbfw_toggle-content');
             content.slideToggle();
-            var icon = $(this);
-            if (icon.text() === '+') {
-                icon.text('−');
+            var icon = $(this).children('.rbfw_toggle-icon');
+            if (icon.text() === ' ') {
+                icon.text(' ');
             } else {
-                icon.text('+');
+                icon.text(' ');
             }
         });
         function get_left_filter_data( filter_date ){
@@ -300,30 +300,52 @@
                     if( response.success ){
 
                         let text_display = response.data.show_text;
+                        let display_markup = response.data.display_date;
 
-                        $("#rbfw_left_filter_cover").hide();
+                        if (!display_markup) {
+                            display_markup = '<div class="rbfw_search_result_empty_state"><div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">Sorry, no data found!</div></div>';
+                        }
 
                         // $('#rbfw_rent_list_wrapper').html( response.data.display_date );
                         $('#rbfw_rent_list_wrapper').fadeOut(200, function () {
-                            $(this).html(response.data.display_date).fadeIn(300);
+                            $(this).html(display_markup).fadeIn(300);
                         });
 
                         $('#rbfw_shoe_result_text').html('<span >'+text_display+'</span>');
-                        $(".rbfw_left_filter_button").text(rbfw_translation.filter);
                     }else{
-                        alert('ok');
+                        $('#rbfw_rent_list_wrapper').html('<div class="rbfw_search_result_empty_state"><div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">No Match Result Found!</div></div>');
                         $('#rbfw_shoe_result_text').html('<div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">No Match Result Found!</div>');
                     }
-
                 },
+                error: function () {
+                    $('#rbfw_rent_list_wrapper').html('<div class="rbfw_search_result_empty_state"><div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">No Match Result Found!</div></div>');
+                    $('#rbfw_shoe_result_text').html('<div class="rbfw_search_result_empty" data-placeholder="" style="display: block;">No Match Result Found!</div>');
+                },
+                complete: function () {
+                    $("#rbfw_left_filter_cover").hide();
+                    $(".rbfw_left_filter_button").text(rbfw_translation.filter);
+                }
             });
         }
 
+        let baseCategories = [];
+        const baseCategoryData = $('#rbfw_rent_list_wrapper').attr('data-base-categories');
+        if (baseCategoryData) {
+            try {
+                const parsedBaseCategories = JSON.parse(baseCategoryData);
+                if (Array.isArray(parsedBaseCategories)) {
+                    baseCategories = parsedBaseCategories;
+                }
+            } catch (error) {
+                baseCategories = [];
+            }
+        }
         var selectedLocation = [];
         var selectedcategory = [];
         var selectedType = [];
         var selectedFeatures = [];
         var get_filters = {
+            base_category: baseCategories,
             location: [],
             category: [],
             type: [],
@@ -463,7 +485,12 @@
 
         $(document).on('click', '.rbfw_left_filter_clearButton',function() {
             $('.rbfw_location, .rbfw_category, .rbfw_rent_type, .rbfw_rent_feature').prop('checked', false);
+            selectedLocation = [];
+            selectedcategory = [];
+            selectedType = [];
+            selectedFeatures = [];
             get_filters = {
+                base_category: baseCategories,
                 location: [],
                 category: [],
                 type: [],
@@ -473,7 +500,6 @@
             get_left_filter_data( get_filters );
             $("#rbfw_price_start").val('');
             $("#rbfw_price_end").val('');
-            $("#rbfw_left_filter_clearButton").hide();
         });
 
     });
@@ -596,8 +622,5 @@ jQuery(document).ready(function($){
         }
     });
 });
-
-
-
 
 

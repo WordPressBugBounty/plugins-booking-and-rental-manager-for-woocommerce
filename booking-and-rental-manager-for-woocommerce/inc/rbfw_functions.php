@@ -1045,11 +1045,18 @@ function rbfw_url_exclude_search_engine() {
 // Update Settings On Register the Plugin
 // Check pro plugin active
 	function rbfw_check_pro_active() {
+		include_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		if ( is_plugin_active( 'booking-and-rental-manager-for-woocommerce-pro/rent-pro.php' ) ) {
+			return true;
+		}
+
+		// Backward compatibility for any legacy/custom installation path.
 		if ( is_plugin_active( 'booking-and-rental-manager-for-woocommerce/rent-pro.php' ) ) {
 			return true;
-		} else {
-			return false;
 		}
+
+		return false;
 	}
 // Hide wc hidden products
 	add_action( 'admin_head', 'rbfw_hide_date_from_order_page' );
@@ -2488,7 +2495,7 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
                     $for_end_date_time = $start_date_time;
                     $d_type   = $value['d_type'];
                     $duration = $value['duration'];
-                    $total_hours = ( $d_type == 'Hours' ? $duration : ( $d_type == 'Days' ? (int)$duration * 24 : (int)$duration * 24 * 7 ) );
+                    $total_hours = ( $d_type == 'Hours' ? $duration : ( $d_type == 'Days' ? (int) $duration * 24 : ( $d_type == 'Weeks' ? (int) $duration * 24 * 7 : (int) $duration * 24 * 30 ) ) );
                     $for_end_date_time->modify( "+$total_hours hours" );
                     $end_date = $for_end_date_time->format( 'Y-m-d' );
                     $end_time = $for_end_date_time->format( 'H:i:s' );
@@ -3181,13 +3188,14 @@ function get_rbfw_post_categories_from_meta() {
 
     foreach ($query->posts as $post_id) {
 
-        // Get the meta value (string like "Car,Bike,Resort")
+        // Get the meta value. Older data may be saved as an array or a comma separated string.
         $value = get_post_meta($post_id, 'rbfw_categories', true);
 
-        $value = $value[0];
+        if ( is_array( $value ) ) {
+            $value = implode( ',', array_filter( $value ) );
+        }
 
-        if (!empty($value)) {
-
+        if ( ! empty( $value ) && is_string( $value ) ) {
             // Convert comma separated string to array
             $items = array_map('trim', explode(',', $value));
 
