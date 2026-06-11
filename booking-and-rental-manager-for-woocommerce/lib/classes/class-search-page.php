@@ -224,30 +224,8 @@
 							$location_query = '';
 						}
 						$rent_categories = isset( $filter_date['category'] ) ? $filter_date['category'] : [];
-						if ( is_array( $rent_categories ) && count( $rent_categories ) > 0 ) {
-							$category_query = array( 'relation' => 'OR' );
-							foreach ( $rent_categories as $category_name ) {
-								$category_query[] = ! empty( $category_name ) ? array(
-									'key'     => 'rbfw_categories',
-									'value'   => serialize( sanitize_text_field( $category_name ) ),
-									'compare' => 'LIKE'
-								) : '';
-							}
-						} else {
-							$category_query = '';
-						}
-						if ( is_array( $base_categories ) && count( $base_categories ) > 0 ) {
-							$base_category_query = array( 'relation' => 'OR' );
-							foreach ( $base_categories as $base_category_name ) {
-								$base_category_query[] = ! empty( $base_category_name ) ? array(
-									'key'     => 'rbfw_categories',
-									'value'   => serialize( sanitize_text_field( $base_category_name ) ),
-									'compare' => 'LIKE'
-								) : '';
-							}
-						} else {
-							$base_category_query = '';
-						}
+						$category_query  = $this->rbfw_build_categories_meta_query( $rent_categories );
+						$base_category_query = $this->rbfw_build_categories_meta_query( $base_categories );
 						$posts_per_page = 100;
 						$number_of_page = 1;
 						$meta_query     = array(
@@ -350,6 +328,36 @@
 					'show_text'    => $show_result,
 				);
 				wp_send_json_success( $result );
+			}
+
+			/**
+			 * Build a precise meta_query group for the selected categories.
+			 *
+			 * FIX: category search returned "Sorry, no data found!" because the
+			 * query only matched serialize()'d array storage of rbfw_categories
+			 * and ignored values stored as a single string or a comma separated
+			 * string. rbfw_build_category_meta_clause() matches every storage
+			 * format the meta has used, so the search matches exactly what the
+			 * sidebar lists, while staying precise enough not to over-match
+			 * similar names (selecting "Stroller" must not match "Light Strollers").
+			 *
+			 * @param array $categories Selected category names.
+			 * @return array|string Meta query group, or '' when nothing selected.
+			 */
+			private function rbfw_build_categories_meta_query( $categories ) {
+				if ( ! is_array( $categories ) || count( $categories ) === 0 ) {
+					return '';
+				}
+				$group = array( 'relation' => 'OR' );
+				foreach ( $categories as $category_name ) {
+					$clause = rbfw_build_category_meta_clause( $category_name );
+					if ( ! empty( $clause ) ) {
+						$group[] = $clause;
+					}
+				}
+
+				// Only return a usable group when at least one clause was added.
+				return ( count( $group ) > 1 ) ? $group : '';
 			}
 
 			public function display_filter_rent_items( $post_id, $post_title, $the_content, $style, $d ) {
@@ -563,10 +571,6 @@
                                     <h2 class="rbfw_rent_list_grid_title">
                                         <a href="<?php echo esc_url( $post_link ); ?>"><?php echo esc_html( $post_title ); ?></a>
                                     </h2>
-                                    <div class="rbfw_rent_list_grid_row rbfw_pricing-box">
-                                        <p class="rbfw_rent_list_row_price"><span class="prc currency_left"><?php echo wp_kses( wc_price( $price ) , rbfw_allowed_html()); ?></span></p>
-                                        <span class="rbfw_rent_list_row_price_level">/ <?php echo esc_html( $price_level ); ?></span>
-                                    </div>
                                 </div>
                                 <div class="rbfw_rent_item_description" id="rbfw_rent_item_description">
                                     <p class="rbfw_rent_item_description_text" style="display: <?php echo esc_attr( $is_display ) ?>">
@@ -586,18 +590,19 @@
 										$cat_features = $value['cat_features'] ? $value['cat_features'] : [];
 										if ( $n == 1 ) {
 											?>
-                                            <ul class="<?php echo esc_attr( $rent_item_list_info ) ?>">
+                                             <div class="<?php echo esc_attr( $rent_item_list_info ) ?>">
 												<?php
 													if ( ! empty( $cat_features ) ) {
 														$i = 1;
 														foreach ( $cat_features as $features ) {
 															if ( $i <= $display_cat_features ) {
-																$icon        = ! empty( $features['icon'] ) ? $features['icon'] : 'fas fa-check-circle';
 																$title       = $features['title'];
 																$rand_number = wp_rand();
 																if ( $title ) {
 																	?>
-                                                                    <li class="bfw_rent_list_items title <?php echo esc_attr( $rand_number ); ?>"><span class="bfw_rent_list_items_icon"><i class="<?php echo esc_html( $icon ); ?>"></i></span> <?php echo esc_html( $title ); ?></li>
+                                                                     <span class="bfw_rent_list_items title <?php echo esc_attr( $rand_number ); ?>">
+																		<?php echo esc_html( $title ); ?>
+																	</span>
 																	<?php
 																}
 															}
@@ -606,9 +611,9 @@
 													}
 												?>
 												<?php if ( count( $cat_features ) > $display_cat_features ) { ?>
-                                                    <div class="rbfw_see_more_category" id="rbfw_see_more_category-<?php echo esc_attr( $post_id ); ?>"><?php echo esc_html__( 'See more','booking-and-rental-manager-for-woocommerce' ) ?></div>
+                                                     <div class="rbfw_see_more_category" id="rbfw_see_more_category-<?php echo esc_attr( $post_id ); ?>"><?php echo esc_html__( 'See more','booking-and-rental-manager-for-woocommerce' ) ?></div>
 												<?php } ?>
-                                            </ul>
+                                             </div>
 											<?php
 										}
 										$n ++;
@@ -616,16 +621,15 @@
 								endif;
 								?>
                                 <div class="rbfw_rent_list_btn_holder">
+                                    <div class="rbfw_rent_list_grid_row rbfw_pricing-box">
+                                        <p class="rbfw_rent_list_row_price"><span class="prc currency_left"><?php echo wp_kses( wc_price( $price ) , rbfw_allowed_html()); ?></span></p>
+                                        <span class="rbfw_rent_list_row_price_level">/ <?php echo esc_html( $price_level ); ?></span>
+                                    </div>
                                     <a class="rbfw_rent_list_link rbfw_rent_list_btn btn" href="<?php echo esc_url( $post_link ); ?>">
 										<?php echo esc_html( $book_now_label ); ?>
                                         <span class="button-icon">
-                                <svg width="64px" height="64px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g
-                                        id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round"
-                                                                                       stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path
-                                            d="M6 17L11 12L6 7M13 17L18 12L13 7" stroke="#000000" stroke-width="2" stroke-linecap="round"
-                                            stroke-linejoin="round"></path> </g>
-                                </svg>
-                            </span>
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </span>
                                     </a>
                                 </div>
                                 <!-- /.rbfw_content_wrapper -->

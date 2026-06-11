@@ -439,7 +439,7 @@ jQuery(document).ready(function () {
     function autoSelectSingleDurationType() {
         const availableOptions = durationTypeSelect.find('option[value!=""]');
 
-        if (!durationTypeSelect.val() && availableOptions.length === 1) {
+        if (!durationTypeSelect.val() && availableOptions.length) {
             durationTypeSelect.val(availableOptions.first().val());
         }
     }
@@ -469,6 +469,115 @@ jQuery(document).ready(function () {
 
 
 
+function rbfwFormatMultipleItemsSummaryDate(date) {
+    if (
+        typeof jQuery !== 'undefined' &&
+        jQuery.datepicker &&
+        typeof js_date_format !== 'undefined'
+    ) {
+        return jQuery.datepicker.formatDate(js_date_format, date);
+    }
+
+    const year = date.getFullYear();
+    const month = ('0' + (date.getMonth() + 1)).slice(-2);
+    const day = ('0' + date.getDate()).slice(-2);
+
+    return year + '-' + month + '-' + day;
+}
+
+function rbfwGetMultipleItemsSummaryEndDate(startDate, durationType, durationQty) {
+    const endDate = new Date(startDate.getTime());
+
+    if (durationType === 'hourly') {
+        endDate.setHours(endDate.getHours() + durationQty);
+    } else if (durationType === 'weekly') {
+        endDate.setDate(endDate.getDate() + (durationQty * 7));
+    } else if (durationType === 'monthly') {
+        endDate.setDate(endDate.getDate() + (durationQty * 30));
+    } else {
+        endDate.setDate(endDate.getDate() + durationQty);
+    }
+
+    return endDate;
+}
+
+function rbfwSetMultipleItemsSummaryTime(date, timeValue) {
+    if (!timeValue) {
+        return date;
+    }
+
+    const timeParts = timeValue.split(':').map(Number);
+    date.setHours(timeParts[0] || 0, timeParts[1] || 0, 0, 0);
+
+    return date;
+}
+
+function rbfwFormatMultipleItemsSummaryTime(date) {
+    return date.toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+function rbfwAppendMultipleItemsSummaryTime(dateText, timeText) {
+    if (!dateText || !timeText || /\d{1,2}:\d{2}/.test(dateText)) {
+        return dateText;
+    }
+
+    return dateText + ' ' + timeText;
+}
+
+function rbfwUpdateMultipleItemsDurationDates(startDateText, endDateText) {
+    const pickupTimeValue = jQuery('#pickup_time').find(':selected').val() || '';
+    const durationType = jQuery('#durationType').val();
+    const durationQty = parseInt(jQuery('#durationQty').val()) || 0;
+    const hasPickupTime = !!pickupTimeValue;
+    let startTimeText = '';
+    let endTimeText = '';
+
+    if (!startDateText || !endDateText) {
+        const pickupDateValue = jQuery('#hidden_pickup_date').val();
+
+        if (!pickupDateValue || !durationType || !durationQty) {
+            jQuery('.rbfw-duration-date').hide();
+            return;
+        }
+
+        const dateParts = pickupDateValue.split('-');
+        const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+        rbfwSetMultipleItemsSummaryTime(startDate, pickupTimeValue);
+
+        if (isNaN(startDate.getTime())) {
+            jQuery('.rbfw-duration-date').hide();
+            return;
+        }
+
+        const endDate = rbfwGetMultipleItemsSummaryEndDate(startDate, durationType, durationQty);
+        startTimeText = hasPickupTime ? rbfwFormatMultipleItemsSummaryTime(startDate) : '';
+        endTimeText = hasPickupTime ? rbfwFormatMultipleItemsSummaryTime(endDate) : '';
+        startDateText = jQuery('#pickup_date').val() || rbfwFormatMultipleItemsSummaryDate(startDate);
+        endDateText = rbfwFormatMultipleItemsSummaryDate(endDate);
+    } else if (pickupTimeValue && durationType && durationQty) {
+        const pickupDateValue = jQuery('#hidden_pickup_date').val();
+        const dateParts = pickupDateValue ? pickupDateValue.split('-') : [];
+        const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+        rbfwSetMultipleItemsSummaryTime(startDate, pickupTimeValue);
+
+        if (!isNaN(startDate.getTime())) {
+            const endDate = rbfwGetMultipleItemsSummaryEndDate(startDate, durationType, durationQty);
+            startTimeText = rbfwFormatMultipleItemsSummaryTime(startDate);
+            endTimeText = rbfwFormatMultipleItemsSummaryTime(endDate);
+        }
+    }
+
+    jQuery('.rbfw-duration-start-label').text(hasPickupTime ? 'Start Date and Time' : 'Start Date');
+    jQuery('.rbfw-duration-end-label').text(hasPickupTime ? 'End Date and Time' : 'End Date');
+    jQuery('.rbfw-duration-start-date').show();
+    jQuery('.rbfw-duration-start-date .item-content').html(rbfwAppendMultipleItemsSummaryTime(startDateText, startTimeText));
+    jQuery('.rbfw-duration-end-date').show();
+    jQuery('.rbfw-duration-end-date .item-content').html(rbfwAppendMultipleItemsSummaryTime(endDateText, endTimeText));
+}
+
 jQuery('body').on('change', '#hidden_pickup_date, .pickup_time, #durationType, #durationQty', function (e) {
 
     let pickup_date = jQuery('#pickup_date').val();
@@ -487,6 +596,8 @@ jQuery('body').on('change', '#hidden_pickup_date, .pickup_time, #durationType, #
     if (!pickup_date) {
         jQuery('button.rbfw_bikecarmd_book_now_btn').attr('disabled',true);
     }
+
+    rbfwUpdateMultipleItemsDurationDates();
 
     if(pickup_date  && durationType && durationQty){
         if(rbfw_enable_time_slot=='no'){
@@ -809,6 +920,7 @@ function rbfw_multi_items_ajax_price_calculation(){
             jQuery('.rbfw-duration').show();
             jQuery('.rbfw-duration .item-content').html(response.total_duration);
             jQuery('.rbfw-duration .rbfw_duration_md').val(response.total_duration);
+            rbfwUpdateMultipleItemsDurationDates(response.start_date, response.end_date);
 
 
             jQuery('.rbfw_quantity_md').show();

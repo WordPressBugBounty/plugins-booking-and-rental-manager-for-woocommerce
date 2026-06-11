@@ -442,6 +442,33 @@ if (!class_exists('RBFW_Woocommerce')) {
                     }
                 }
 
+                if ( ! ( $end_date && $end_time ) && ! empty( $rbfw_type_info ) ) {
+                    $rbfw_bike_car_sd_data = get_post_meta( $rbfw_id, 'rbfw_bike_car_sd_data', true ) ? get_post_meta( $rbfw_id, 'rbfw_bike_car_sd_data', true ) : array();
+                    $selected_rent_type    = '';
+                    foreach ( $rbfw_type_info as $type_name => $type_qty ) {
+                        $selected_rent_type = $type_name;
+                        break;
+                    }
+                    foreach ( $rbfw_bike_car_sd_data as $rent_row ) {
+                        if ( ! empty( $rent_row['rent_type'] ) && $rent_row['rent_type'] === $selected_rent_type ) {
+                            $duration   = ! empty( $rent_row['duration'] ) ? (int) $rent_row['duration'] : 0;
+                            $d_type     = ! empty( $rent_row['d_type'] ) ? $rent_row['d_type'] : 'Days';
+                            $start_time = $rbfw_bikecarsd_selected_time ? $rbfw_bikecarsd_selected_time : '00:00';
+                            if ( $duration > 0 ) {
+                                $start_date_time = new DateTime( $bikecarsd_selected_date . ' ' . $start_time );
+                                $total_hours     = ( $d_type == 'Hours' ? $duration : ( $d_type == 'Days' ? $duration * 24 : ( $d_type == 'Weeks' ? $duration * 24 * 7 : $duration * 24 * 30 ) ) );
+                                $start_date_time->modify( "+$total_hours hours" );
+                                $end_date = $start_date_time->format( 'Y-m-d' );
+                                $end_time = $start_date_time->format( 'H:i:s' );
+                            }
+                            break;
+                        }
+                    }
+                }
+                if ( ! ( $end_date && $end_time ) ) {
+                    $end_date = $bikecarsd_selected_date;
+                }
+
                 $rbfw_bikecarsd_duration_price                   = $rbfw_bikecarsd->rbfw_bikecarsd_price_calculation( $rbfw_id, $rbfw_type_info, $rbfw_service_info, 'rbfw_bikecarsd_duration_price' , $bikecarsd_selected_date);
                 $rbfw_bikecarsd_service_price                    = $rbfw_bikecarsd->rbfw_bikecarsd_price_calculation( $rbfw_id, $rbfw_type_info, $rbfw_service_info, 'rbfw_bikecarsd_service_price' );
 
@@ -1099,6 +1126,8 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $dropoff_location    = $values['rbfw_dropoff_point'] ? $values['rbfw_dropoff_point'] : '';
                 $rbfw_start_datetime = $values['rbfw_start_datetime'] ? $values['rbfw_start_datetime'] : '';
                 $rbfw_start_time     = $values['rbfw_start_time'] ? $values['rbfw_start_time'] : '';
+                $rbfw_end_datetime   = $values['rbfw_end_datetime'] ? $values['rbfw_end_datetime'] : '';
+                $rbfw_end_time       = $values['rbfw_end_time'] ? $values['rbfw_end_time'] : '';
                 $rbfw_ticket_info    = $values['rbfw_ticket_info'] ? $values['rbfw_ticket_info'] : [];
                 $rbfw_type_info      = $values['rbfw_type_info'] ? $values['rbfw_type_info'] : [];
 
@@ -1144,6 +1173,33 @@ if (!class_exists('RBFW_Woocommerce')) {
                         esc_html( $start_date_label ),
                         rbfw_date_format( $rbfw_start_datetime )
                     );
+                }
+                if ( ! empty( $rbfw_end_datetime ) ) {
+                    if ( $rbfw_end_time != '00:00' ) {
+                        $end_date_time_label = (
+                            $rbfw->get_option_trans( 'rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings' )
+                            && want_loco_translate() == 'no'
+                        )
+                            ? $rbfw->get_option_trans( 'rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings' )
+                            : esc_html__( 'End Date and Time:', 'booking-and-rental-manager-for-woocommerce' );
+
+                        $item->add_meta_data(
+                            esc_html( $end_date_time_label ),
+                            rbfw_date_format( $rbfw_end_datetime ) . ' ' . gmdate( get_option( 'time_format' ), strtotime( $rbfw_end_time ) )
+                        );
+                    } else {
+                        $end_date_label = (
+                            $rbfw->get_option_trans( 'rbfw_text_end_date', 'rbfw_basic_translation_settings' )
+                            && want_loco_translate() == 'no'
+                        )
+                            ? $rbfw->get_option_trans( 'rbfw_text_end_date', 'rbfw_basic_translation_settings' )
+                            : esc_html__( 'End Date:', 'booking-and-rental-manager-for-woocommerce' );
+
+                        $item->add_meta_data(
+                            esc_html( $end_date_label ),
+                            rbfw_date_format( $rbfw_end_datetime )
+                        );
+                    }
                 }
                 if ( ! empty( $pickup_location ) ) {
                     $item->add_meta_data( rbfw_string_return( 'rbfw_text_pickup_location', esc_html__( 'Pickup Location', 'booking-and-rental-manager-for-woocommerce' ) ), $pickup_location );
@@ -1268,6 +1324,8 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $dropoff_location    = $values['rbfw_dropoff_point'] ? $values['rbfw_dropoff_point'] : '';
                 $rbfw_start_datetime = $values['rbfw_start_datetime'] ? $values['rbfw_start_datetime'] : '';
                 $rbfw_start_time     = $values['rbfw_start_time'] ? $values['rbfw_start_time'] : '';
+                $rbfw_end_datetime   = $values['rbfw_end_datetime'] ? $values['rbfw_end_datetime'] : '';
+                $rbfw_end_time       = $values['rbfw_end_time'] ? $values['rbfw_end_time'] : '';
                 $rbfw_ticket_info    = $values['rbfw_ticket_info'] ? $values['rbfw_ticket_info'] : [];
 
                 $rbfw_management_info = $values['rbfw_management_info'] ? $values['rbfw_management_info'] : [];
@@ -1308,6 +1366,33 @@ if (!class_exists('RBFW_Woocommerce')) {
                         esc_html( $start_date_label ),
                         rbfw_date_format( $rbfw_start_datetime )
                     );
+                }
+                if ( ! empty( $rbfw_end_datetime ) ) {
+                    if ( $rbfw_end_time != '00:00' ) {
+                        $end_date_time_label = (
+                            $rbfw->get_option_trans( 'rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings' )
+                            && want_loco_translate() == 'no'
+                        )
+                            ? $rbfw->get_option_trans( 'rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings' )
+                            : esc_html__( 'End Date and Time:', 'booking-and-rental-manager-for-woocommerce' );
+
+                        $item->add_meta_data(
+                            esc_html( $end_date_time_label ),
+                            rbfw_date_format( $rbfw_end_datetime ) . ' ' . gmdate( get_option( 'time_format' ), strtotime( $rbfw_end_time ) )
+                        );
+                    } else {
+                        $end_date_label = (
+                            $rbfw->get_option_trans( 'rbfw_text_end_date', 'rbfw_basic_translation_settings' )
+                            && want_loco_translate() == 'no'
+                        )
+                            ? $rbfw->get_option_trans( 'rbfw_text_end_date', 'rbfw_basic_translation_settings' )
+                            : esc_html__( 'End Date:', 'booking-and-rental-manager-for-woocommerce' );
+
+                        $item->add_meta_data(
+                            esc_html( $end_date_label ),
+                            rbfw_date_format( $rbfw_end_datetime )
+                        );
+                    }
                 }
                 if ( ! empty( $pickup_location ) ) {
                     $item->add_meta_data( rbfw_string_return( 'rbfw_text_pickup_location', esc_html__( 'Pickup Location', 'booking-and-rental-manager-for-woocommerce' ) ), $pickup_location );

@@ -26,6 +26,8 @@
 
 
 
+            rbfwHideSingleDayDurationSummary();
+
             let post_id = jQuery('.rbfw_post_id').val();
             let manage_inventory_as_timely = $('#manage_inventory_as_timely').val();
             let enable_specific_duration = $('#enable_specific_duration').val();
@@ -161,7 +163,7 @@
 
                 console.log('start_date',start_date);
 
-                var duration = jQuery(this).data('duration');
+                var duration = parseInt(jQuery(this).data('duration'), 10) || 0;
                 var duration_type = jQuery(this).data('d_type');
                 var start_time ='';
 
@@ -177,7 +179,16 @@
 
                 jQuery('#rbfw_start_time').val(start_time);
 
-                let startDateTime = new Date(start_date + ' ' + start_time);
+                let dateParts = start_date.split('-').map(Number);
+                let timeParts = (start_time || '00:00').split(':').map(Number);
+                let startDateTime = new Date(
+                    dateParts[0],
+                    dateParts[1] - 1,
+                    dateParts[2],
+                    timeParts[0] || 0,
+                    timeParts[1] || 0,
+                    0
+                );
 
 
 // Add duration
@@ -187,6 +198,8 @@
                     startDateTime.setDate(startDateTime.getDate() + duration);
                 } else if(duration_type === 'Weeks'){
                     startDateTime.setDate(startDateTime.getDate() + (duration * 7));
+                } else if(duration_type === 'Months'){
+                    startDateTime.setDate(startDateTime.getDate() + (duration * 30));
                 }
 
 
@@ -207,6 +220,7 @@
 
             }
 
+            rbfwUpdateSingleDayDurationSummary(jQuery(this));
 
             let available_quantity = jQuery(this).attr('data-available_quantity');
            
@@ -485,7 +499,62 @@
 
 })(jQuery)
 
+function rbfwFormatSingleDaySummaryDate(date) {
+    if (
+        typeof jQuery !== 'undefined' &&
+        jQuery.datepicker &&
+        typeof js_date_format !== 'undefined'
+    ) {
+        return jQuery.datepicker.formatDate(js_date_format, date);
+    }
 
+    const year = date.getFullYear();
+    const month = ('0' + (date.getMonth() + 1)).slice(-2);
+    const day = ('0' + date.getDate()).slice(-2);
+
+    return year + '-' + month + '-' + day;
+}
+
+function rbfwGetSingleDayDateFromValue(dateValue) {
+    if (!dateValue) {
+        return null;
+    }
+
+    const dateParts = dateValue.split('-').map(Number);
+    const date = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+
+    return isNaN(date.getTime()) ? null : date;
+}
+
+function rbfwHideSingleDayDurationSummary() {
+    jQuery('.rbfw-duration-sd').hide();
+    jQuery('.rbfw-duration-sd .rbfw-duration-date').hide();
+    jQuery('.rbfw-duration-sd .item-content').empty();
+}
+
+function rbfwUpdateSingleDayDurationSummary(selectedDuration) {
+    const startDateValue = jQuery('#rbfw_bikecarsd_selected_date').val();
+    const endDateValue = jQuery('#rbfw_end_date').val();
+    const startDate = rbfwGetSingleDayDateFromValue(startDateValue);
+    const endDate = rbfwGetSingleDayDateFromValue(endDateValue);
+
+    if (!startDate || !endDate) {
+        rbfwHideSingleDayDurationSummary();
+        return;
+    }
+
+    const durationText = selectedDuration.find('.rbfw_time').text().trim() ||
+        ((selectedDuration.data('duration') || '') + ' ' + (selectedDuration.data('d_type') || '')).trim();
+    const startDateText = jQuery('.pickup_date_timely').val() || rbfwFormatSingleDaySummaryDate(startDate);
+    const endDateText = rbfwFormatSingleDaySummaryDate(endDate);
+
+    jQuery('.rbfw-duration-sd').show();
+    jQuery('.rbfw-duration-sd > .rbfw-single-right-heading .item-content').html(durationText);
+    jQuery('.rbfw-duration-sd .rbfw-duration-start-date').show();
+    jQuery('.rbfw-duration-sd .rbfw-duration-start-date .item-content').html(startDateText);
+    jQuery('.rbfw-duration-sd .rbfw-duration-end-date').show();
+    jQuery('.rbfw-duration-sd .rbfw-duration-end-date .item-content').html(endDateText);
+}
 
 function calculateTotal() {  
     let total = 0;
@@ -610,7 +679,7 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
                     $el.attr('data-price', service_info[type].price);
                     $el.attr('data-available_quantity', service_info[type].stock);
 
-                    if(service_info[type].stock==0){
+                    if(service_info[type].stock <= 0){
                         $el.find('.rent-type').html(type + '<span class="solded">'+ rbfw_translation.sold_out +'</span>');
 
                         $el.addClass('rbfw-sold-out');
