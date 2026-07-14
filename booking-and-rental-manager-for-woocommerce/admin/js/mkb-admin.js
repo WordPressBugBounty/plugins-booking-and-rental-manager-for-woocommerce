@@ -1,11 +1,139 @@
 (function($) {
     "use strict";
-    jQuery(window).load(function() {
-        jQuery('.mp_tab_menu').each(function() {
-            jQuery(this).find('ul li:first-child').trigger('click');
-        });
-        if (jQuery('[name="mep_org_address"]').val() > 0) {
-            jQuery('.mp_event_address').slideUp(250);
+
+    /**
+     * Extra Service admin sections — only one visible at a time.
+     *
+     * Category 1 (.rbfw_es_price_config_wrapper):
+     *   bike_car_sd, appointment, multiple_items
+     *
+     * Category 2 (.additional-service-item-price):
+     *   bike_car_md, resort
+     *
+     * @param {string} itemType  Current rbfw_item_type value.
+     * @param {jQuery} [$context] Optional DOM root (defaults to document).
+     */
+    window.rbfwUpdateExtraServiceSectionVisibility = function(itemType, $context) {
+        var $root = ($context && $context.length) ? $context : jQuery(document);
+        var $category1 = $root.find('.rbfw_es_price_config_wrapper');
+        var $category2 = $root.find('.additional-service-item-price');
+
+        // Always hide both first so they are never visible together.
+        $category1.hide();
+        $category2.hide();
+
+        var showCategory1 = ['bike_car_sd', 'appointment', 'multiple_items'];
+        var showCategory2 = ['bike_car_md', 'resort'];
+
+        if (showCategory1.indexOf(itemType) !== -1) {
+            $category1.show();
+        } else if (showCategory2.indexOf(itemType) !== -1) {
+            $category2.show();
+        }
+    };
+
+    window.rbfwSetTimelyInventorySection = function (scope, showSection) {
+        var $root = scope ? jQuery(scope) : jQuery('#rbfw_add_meta_box');
+        if (!$root.length) {
+            $root = jQuery('.rbfw-me-panel[data-panel="pricing"]');
+        }
+        if (!$root.length) {
+            $root = jQuery(document);
+        }
+
+        var $section = $root.find('section.manage_inventory_as_timely');
+        if (!$section.length) {
+            return;
+        }
+
+        var $wrapper = $section.closest('.rbfw_bike_car_sd_wrapper');
+
+        if (showSection) {
+            $section.removeClass('rbfw_hide hide').removeAttr('style').css('display', 'flex');
+            $root.find('input[type="hidden"][name="manage_inventory_as_timely"]').remove();
+            $section.find('[name="manage_inventory_as_timely"]').prop('disabled', false);
+        } else {
+            $section.addClass('rbfw_hide hide').attr('style', 'display:none !important;');
+            $section.find('[name="manage_inventory_as_timely"]').prop('disabled', true);
+            if (!$root.find('input[type="hidden"][name="manage_inventory_as_timely"]').length) {
+                jQuery('<input>', {
+                    type: 'hidden',
+                    name: 'manage_inventory_as_timely',
+                    value: 'off'
+                }).prependTo($wrapper.length ? $wrapper : $section.parent());
+            }
+        }
+    };
+
+    var rbfwPostId = (window.location.search.match(/[?&]post=(\d+)/) || [])[1] || '';
+    var rbfwTabStorageKey = 'rbfw_active_tab_' + rbfwPostId;
+
+    var rbfwClassicTabLoaderDone = false;
+
+    function rbfwHideClassicTabLoader() {
+        jQuery('.rbfw-tab-loader').fadeOut(280, function() { jQuery(this).remove(); });
+    }
+
+    function rbfwInitClassicTabLoader() {
+        if (rbfwClassicTabLoaderDone || !jQuery('.mp_tab_details').length) {
+            return;
+        }
+        rbfwClassicTabLoaderDone = true;
+
+        try {
+            jQuery('.mp_tab_menu').each(function() {
+                var savedTab = rbfwPostId ? localStorage.getItem(rbfwTabStorageKey) : null;
+                var $menu = jQuery(this);
+                var $target = savedTab ? $menu.find('ul li[data-target-tabs="' + savedTab + '"]') : jQuery();
+                // Strip active from all tabs so the !hasClass('active') guard never blocks restore
+                $menu.find('ul li').removeClass('active');
+                if ($target.length && $target.is(':visible')) {
+                    $target.trigger('click');
+                } else if ($target.length) {
+                    // target exists but is hidden (e.g. hidden by item-type logic) — fall back to first visible tab
+                    var $firstVisible = $menu.find('ul li:visible').first();
+                    ($firstVisible.length ? $firstVisible : $menu.find('ul li:first-child')).trigger('click');
+                } else {
+                    $menu.find('ul li:first-child').trigger('click');
+                }
+            });
+            if (jQuery('[name="mep_org_address"]').val() > 0) {
+                jQuery('.mp_event_address').slideUp(250);
+            }
+        } finally {
+            rbfwHideClassicTabLoader();
+        }
+    }
+
+    // Inject skeleton loader as soon as the DOM is ready
+    jQuery(document).ready(function() {
+        var $tabDetails = jQuery('.mp_tab_details');
+        if (!$tabDetails.length) {
+            return;
+        }
+
+        var skeletonRows = '';
+        for (var s = 0; s < 7; s++) {
+            var widths = [55, 75, 40, 85, 60, 70, 50];
+            skeletonRows += '<div class="rbfw-sk-row">'
+                + '<div class="rbfw-sk rbfw-sk-icon"></div>'
+                + '<div class="rbfw-sk rbfw-sk-label" style="width:' + widths[s] + '%"></div>'
+                + '<div class="rbfw-sk rbfw-sk-input"></div>'
+                + '</div>';
+        }
+        $tabDetails.prepend(
+            '<div class="rbfw-tab-loader">'
+            +   '<div class="rbfw-sk rbfw-sk-title"></div>'
+            +   '<div class="rbfw-sk rbfw-sk-sub"></div>'
+            +   skeletonRows
+            + '</div>'
+        );
+
+        jQuery(window).on('load.rbfwClassicTabLoader', rbfwInitClassicTabLoader);
+        setTimeout(rbfwInitClassicTabLoader, 6000);
+
+        if (document.readyState === 'complete') {
+            setTimeout(rbfwInitClassicTabLoader, 150);
         }
     });
     jQuery(document).on('click', '[data-target-tabs]', function() {
@@ -16,6 +144,9 @@
             targetParent.children('.mp_tab_item[data-tab-item="' + tabsTarget + '"]').slideDown(250);
             jQuery(this).siblings('li.active').removeClass('active');
             jQuery(this).addClass('active');
+        }
+        if (rbfwPostId) {
+            localStorage.setItem(rbfwTabStorageKey, jQuery(this).attr('data-target-tabs'));
         }
         return false;
     });
@@ -148,79 +279,84 @@
 
         var current_item_type = jQuery('#rbfw_item_type').val();
 
+        jQuery('#rbfw_add_meta_box').attr('data-item-type', current_item_type);
+        jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').attr('data-item-type', current_item_type);
 
-        if ( current_item_type != 'appointment') {
-            jQuery('.rbfw_seasonal_price_config_wrapper').show();
-            if(current_item_type == 'bike_car_sd'){
-
-                jQuery('.sessional_price_single_day').show();
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_resort').hide();
-                jQuery('.mds_price_resort').hide();
-                jQuery('.additional-service-item-price').hide();
-
-            }else if(current_item_type == 'resort'){
-                jQuery('.sessional_price_resort').show();
-                jQuery('.mds_price_resort').show();
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_single_day').hide();
-                jQuery('.additional-service-item-price').hide();
-            }else{
-
-                jQuery('.sessional_price_multi_day').show();
-                jQuery('.sessional_price_single_day').hide();
-                jQuery('.sessional_price_resort').hide();
-                jQuery('.mds_price_resort').hide();
-
-            }
-        } else {
-            jQuery('.rbfw_seasonal_price_config_wrapper').hide();
-            jQuery('.additional-service-item-price').hide();
+        if (typeof window.rbfwSpSyncSeasonalPanelForRentType === 'function') {
+            window.rbfwSpSyncSeasonalPanelForRentType(current_item_type, jQuery('#rbfw_add_meta_box'));
         }
+
+        // Extra service sections: one category per rental type (initial load).
+        window.rbfwUpdateExtraServiceSectionVisibility(current_item_type);
 
         if (current_item_type == 'bike_car_sd' || current_item_type == 'appointment') {
             jQuery('tr[data-row=rbfw_time_slot_switch]').show();
         }else if(current_item_type == 'multiple_items'){
             jQuery('.rbfw_min_max_booking_day_row').hide();
-            jQuery('.rbfw_seasonal_price_config_wrapper').hide();
         } else {
             jQuery('tr[data-row=rbfw_time_slot_switch]').hide();
             jQuery('tr[data-row=rdfw_available_time]').show();
         }
 
-
-        var status = $('.rbfw_es_price_config_wrapper').data('status');
-
-        
-        if(status=='no' && current_item_type == 'bike_car_md'){
-            $('.rbfw_es_price_config_wrapper').hide();
-        }else{
-            $('.rbfw_es_price_config_wrapper').show();
+        if (current_item_type == 'appointment') {
+            jQuery('section.appointment-onday').removeClass('hide').show();
+            window.rbfwSetTimelyInventorySection('#rbfw_add_meta_box', false);
+            jQuery('.rbfw_time_inventory').hide();
+            jQuery('.rbfw_item_stock_quantity').hide();
+        } else {
+            jQuery('section.appointment-onday').addClass('hide').hide();
+            if (current_item_type == 'bike_car_sd') {
+                window.rbfwSetTimelyInventorySection('#rbfw_add_meta_box', true);
+            }
         }
 
-        var type_desc = jQuery('.rbfw-rent-type.selected').data('rent-type-desc');
-        jQuery('.rbfw-rent-type-desc').html(type_desc);
-        
+
+        var rbfwLegacyEsHasData = !!parseInt(jQuery('.rbfw_es_price_config_wrapper').data('has-legacy-data'), 10);
+
+        function rbfwUpdateRentTypeDesc($card) {
+            if (!$card.length) return;
+            var type_desc = $card.data('rent-type-desc');
+            var name = $card.clone().find('.icon').remove().end().text().trim();
+            var $desc = jQuery('.rbfw-rent-type-desc');
+            if (!$desc.length) return;
+            $desc.html('<strong class="rbfw-rent-type-desc-name">' + name + '</strong>' + type_desc);
+
+            // Position the ::before arrow relative to the desc box's own left edge
+            var descOffset = $desc.offset();
+            var cardOffset = $card.offset();
+            if (descOffset && cardOffset) {
+                var cardCenter = cardOffset.left - descOffset.left + $card.outerWidth() / 2;
+                $desc[0].style.setProperty('--rbfw-arrow-left', cardCenter + 'px');
+            }
+        }
+
+        rbfwUpdateRentTypeDesc(jQuery('.rbfw-rent-type.selected'));
+
         jQuery('.rbfw-rent-type').on('click', function() {
             var item_type = jQuery(this).data('rent-type');
-            var type_desc = jQuery(this).data('rent-type-desc');
             jQuery('#rbfw_item_type').val(item_type);
-            jQuery('.rbfw-rent-type-desc').html(type_desc);
-            jQuery('.rbfw-rent-type').removeClass('selected')
+            jQuery('#rbfw_add_meta_box').attr('data-item-type', item_type);
+            jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').attr('data-item-type', item_type);
+            jQuery('.rbfw-rent-type').removeClass('selected');
             jQuery(this).addClass('selected');
+            rbfwUpdateRentTypeDesc(jQuery(this));
 
             if (item_type == 'bike_car_sd') {
                 jQuery('.rbfw_bike_car_sd_wrapper').show();
+                if ( jQuery('[name="manage_inventory_as_timely"]').val() === 'on' && jQuery('[name="enable_specific_duration"]').val() === 'on' ) {
+                    jQuery('.rbfw_multi_day_price_conf.rbfw_bike_car_sd_wrapper').hide();
+                }
                 jQuery('.rbfw_general_price_config_wrapper').hide();
                 jQuery('.rbfw_switch_extra_service_qty').hide();
-                jQuery('li[data-target-tabs="#rbfw_variations"]').hide();
+                // Single Day now supports item variations: keep the Inventory/Variations tab visible.
+                jQuery('li[data-target-tabs="#rbfw_variations"]').show();
                 jQuery('.rbfw_switch_md_type_item_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').show();
                 jQuery('.rbfw_resort_price_config_wrapper').hide();
-                jQuery('.rbfw_seasonal_price_config_wrapper').show();
-                jQuery('.rbfw_switch_sd_appointment_row').hide();
+                jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').show();
+                jQuery('.rbfw_switch_sd_appointment_row').addClass('hide').removeClass('show').hide();
+                jQuery('section.appointment-onday').addClass('hide').hide();
                 jQuery('.rbfw_bike_car_sd_price_table_action_column,.rbfw_bike_car_sd_price_table_add_new_type_btn_wrap').show();
-                jQuery('.rbfw_es_price_config_wrapper').show();
                 jQuery('.rbfw_discount_price_config_wrapper').hide();
                 jQuery('.rbfw_min_max_booking_day_row').hide();
                 jQuery('tr[data-row=rbfw_time_slot_switch]').show();
@@ -232,23 +368,9 @@
 
                 jQuery('.sd-add-type-and-sessional').show();
 
+                window.rbfwSetTimelyInventorySection('#rbfw_add_meta_box', true);
 
-                jQuery('.additional-service-item-price').hide();
-
-                jQuery('.manage_inventory_as_timely').show();
-
-                jQuery('.sessional_price_single_day').show();
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_resort').hide();
-                jQuery('.mds_price_resort').hide();
-
-                if(jQuery('[name="manage_inventory_as_timely"]').val()=='on'){
-                    jQuery('.rbfw_time_inventory').show();
-                    jQuery('.rbfw_without_time_inventory').hide();
-                }else{
-                    jQuery('.rbfw_time_inventory').hide();
-                    jQuery('.rbfw_without_time_inventory').show();
-                }
+                syncTimelyColumns();
                 jQuery('.rbfw_multiple_items').hide();
 
                 jQuery('table.wprently_fee-table th:nth-child(3)').hide();
@@ -257,17 +379,17 @@
             } else if (item_type == 'appointment') {
                 jQuery('.rbfw_bike_car_sd_wrapper').show();
                 jQuery('.rbfw_general_price_config_wrapper').addClass('rbfw-d-none');
-                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_location_config"]').hide();
-                jQuery('.mp_tab_item[data-target-tabs="#rbfw_location_config"]').hide();
+                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_location_config"]').show();
+                jQuery('.mp_tab_item[data-target-tabs="#rbfw_location_config"]').show();
                 jQuery('.rbfw_switch_extra_service_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_variations"]').hide();
                 jQuery('.rbfw_switch_md_type_item_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').show();
                 jQuery('.rbfw_resort_price_config_wrapper').hide();
-                jQuery('.rbfw_seasonal_price_config_wrapper').hide();
-                jQuery('.rbfw_switch_sd_appointment_row').show();
+                jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').hide();
+                jQuery('.rbfw_switch_sd_appointment_row').removeClass('hide').addClass('show').show();
+                jQuery('section.appointment-onday').removeClass('hide').show();
                 jQuery('.rbfw_bike_car_sd_price_table_action_column,.rbfw_bike_car_sd_price_table_add_new_type_btn_wrap').hide();
-                jQuery('.rbfw_es_price_config_wrapper').hide();
                 jQuery('.rbfw_discount_price_config_wrapper').hide();
                 jQuery('.rbfw_min_max_booking_day_row').hide();
                 jQuery('tr[data-row=rbfw_time_slot_switch]').show();
@@ -280,8 +402,7 @@
 
                 jQuery('.sd-add-type-and-sessional').hide();
 
-
-                jQuery('.manage_inventory_as_timely').hide();
+                window.rbfwSetTimelyInventorySection('#rbfw_add_meta_box', false);
                 jQuery('.rbfw_time_inventory').hide();
                 jQuery('.rbfw_without_time_inventory').show();
                 jQuery('.rbfw_item_stock_quantity').hide();
@@ -295,14 +416,12 @@
                 }
                 jQuery('.rbfw_multiple_items').hide();
 
-                jQuery('.additional-service-item-price').hide();
-
                 jQuery('table.wprently_fee-table th:nth-child(3)').hide();
                 jQuery('table.wprently_fee-table td:nth-child(3)').hide();
 
             } else if (item_type == 'resort') {
-                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_location_config"]').hide();
-                jQuery('.mp_tab_item[data-target-tabs="#rbfw_location_config"]').hide();
+                jQuery('.mp_tab_menu li[data-target-tabs="#rbfw_location_config"]').show();
+                jQuery('.mp_tab_item[data-target-tabs="#rbfw_location_config"]').show();
                 jQuery('.rbfw_switch_extra_service_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_variations"]').hide();
                 jQuery('.rbfw_switch_md_type_item_qty').hide();
@@ -311,8 +430,8 @@
                 jQuery('.rbfw_general_price_config_wrapper').hide();
                 jQuery('.rbfw_resort_price_config_wrapper').show();
                 jQuery('.rbfw_location_switch').hide();
-                jQuery('.rbfw_switch_sd_appointment_row').hide();
-                jQuery('.rbfw_es_price_config_wrapper').show();
+                jQuery('.rbfw_switch_sd_appointment_row').addClass('hide').removeClass('show').hide();
+                jQuery('section.appointment-onday').addClass('hide').hide();
                 jQuery('.rbfw_discount_price_config_wrapper').show();
                 jQuery('.rbfw_min_max_booking_day_row').show();
                 jQuery('tr[data-row=rbfw_time_slot_switch]').hide();
@@ -320,22 +439,13 @@
                 jQuery('.rbfw_enable_start_end_date_switch_row').hide();
                 jQuery('.rbfw_enable_start_end_date_field_row').hide();
                 jQuery('.rbfw_off_days').show();
-
-                jQuery('.sessional_price_resort').show();
-                jQuery('.mds_price_resort').show();
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_single_day').hide();
+                jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').show();
 
                 jQuery('.rbfw_multiple_items').hide();
-
-                jQuery('.additional-service-item-price').hide();
 
                 jQuery('table.wprently_fee-table th:nth-child(3)').show();
                 jQuery('table.wprently_fee-table td:nth-child(3)').show();
 
-            }else if (item_type == 'resort') {
-                jQuery('.rbfw_bike_car_sd_wrapper').show();
-                jQuery('.additional-service-item-price').hide();
             }else if (item_type == 'multiple_items') {
 
                 jQuery('.rbfw_bike_car_sd_wrapper').hide();
@@ -345,11 +455,10 @@
                 jQuery('.rbfw_switch_md_type_item_qty').hide();
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').show();
                 jQuery('.rbfw_resort_price_config_wrapper').hide();
-                jQuery('.rbfw_seasonal_price_config_wrapper').hide();
-                jQuery('.rbfw_switch_sd_appointment_row').hide();
+                jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').show();
+                jQuery('.rbfw_switch_sd_appointment_row').addClass('hide').removeClass('show').hide();
+                jQuery('section.appointment-onday').addClass('hide').hide();
                 jQuery('.rbfw_bike_car_sd_price_table_action_column,.rbfw_bike_car_sd_price_table_add_new_type_btn_wrap').show();
-                jQuery('.rbfw_es_price_config_wrapper').hide();
-                jQuery('.additional-service-item-price').show();
                 jQuery('.rbfw_discount_price_config_wrapper').hide();
                 jQuery('.rbfw_min_max_booking_day_row').hide();
                 jQuery('tr[data-row=rbfw_time_slot_switch]').hide();
@@ -360,22 +469,21 @@
                 jQuery('.wervice_quantity_input_box').show();
                 jQuery('#add-bike-car-sd-type-row').show();
 
-                jQuery('.manage_inventory_as_timely').show();
+                window.rbfwSetTimelyInventorySection('#rbfw_add_meta_box', true);
 
-                jQuery('.sessional_price_single_day').show();
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_resort').hide();
-                jQuery('.mds_price_resort').hide();
-
-                if(jQuery('[name="manage_inventory_as_timely"]').val()=='on'){
-                    jQuery('.rbfw_time_inventory').show();
-                    jQuery('.rbfw_without_time_inventory').hide();
-                }else{
-                    jQuery('.rbfw_time_inventory').hide();
-                    jQuery('.rbfw_without_time_inventory').show();
-                }
+                syncTimelyColumns();
 
                 jQuery('.rbfw_multiple_items').show();
+
+                ['hourly', 'daily', 'weekly', 'monthly'].forEach(function(type) {
+                    var cb = document.getElementById('enable' + type.charAt(0).toUpperCase() + type.slice(1));
+                    if (cb && !cb.checked) {
+                        cb.checked = true;
+                        if (typeof toggleGlobalPricing === 'function') {
+                            toggleGlobalPricing(type);
+                        }
+                    }
+                });
 
                 jQuery('table.wprently_fee-table th:nth-child(3)').hide();
                 jQuery('table.wprently_fee-table td:nth-child(3)').hide();
@@ -393,8 +501,9 @@
                 jQuery('li[data-target-tabs="#rbfw_date_settings_meta_boxes"]').show();
                 jQuery('.rbfw_location_switch').show();
                 jQuery('.rbfw_general_price_config_wrapper').show();
-                jQuery('.rbfw_seasonal_price_config_wrapper').show();
-                jQuery('.rbfw_switch_sd_appointment_row').hide();
+                jQuery('#rbfw_add_meta_box .rbfw_seasonal_price_config_wrapper').show();
+                jQuery('.rbfw_switch_sd_appointment_row').addClass('hide').removeClass('show').hide();
+                jQuery('section.appointment-onday').addClass('hide').hide();
 
                 jQuery('.rbfw_discount_price_config_wrapper').show();
                 jQuery('.rbfw_min_max_booking_day_row').show();
@@ -406,27 +515,23 @@
                 jQuery('.rbfw_off_days').show();
                 jQuery('.wervice_quantity_input_box').show();
 
-                jQuery('.sessional_price_multi_day').hide();
-                jQuery('.sessional_price_single_day').hide();
-
-                jQuery('.rbfw_es_price_config_wrapper').show();
-                jQuery('.additional-service-item-price').show();
-
-           /*     var status = $('.rbfw_es_price_config_wrapper').data('status');
-                if(status=='yes'){
-                    $('.rbfw_es_price_config_wrapper').show();
-                }else{
-                    $('.rbfw_es_price_config_wrapper').hide();
-                }*/
-                jQuery('.sessional_price_multi_day').show();
-                jQuery('.sessional_price_single_day').hide();
-                jQuery('.sessional_price_resort').hide();
-                jQuery('.mds_price_resort').hide();
                 jQuery('.rbfw_multiple_items').hide();
 
                 jQuery('table.wprently_fee-table th:nth-child(3)').show();
                 jQuery('table.wprently_fee-table td:nth-child(3)').show();
 
+            }
+
+            // Return-date release applies only to date-range rentals; hide it for
+            // Single Day and Appointment. (The multiple-item section is handled per
+            // branch above via .rbfw_switch_md_type_item_qty.)
+            jQuery('.rbfw_stock_return_date_section').toggle(item_type !== 'bike_car_sd' && item_type !== 'appointment');
+
+            // Extra service sections: one category per rental type (on type change).
+            window.rbfwUpdateExtraServiceSectionVisibility(item_type);
+
+            if (typeof window.rbfwSpSyncSeasonalPanelForRentType === 'function') {
+                window.rbfwSpSyncSeasonalPanelForRentType(item_type, jQuery('#rbfw_add_meta_box'));
             }
 
             return false;
@@ -741,6 +846,121 @@
                 }
             });
         });
+
+        /* Edit Stock: opens the same modal shell with an editable form,
+           tailored per rent type (flat qty / variations / per-rent-type /
+           per-room), and saves back to the exact meta the item editor uses. */
+        jQuery(document).on('click', '.rbfw_stock_edit_details', function (e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            jQuery("#rbfw_stock_view_result_wrap").mage_modal({
+                escapeClose: false,
+                clickClose: false,
+                showClose: true
+            });
+
+            let data_id = jQuery(this).attr('data-id');
+
+            jQuery.ajax({
+                type: 'POST',
+                url: rbfw_ajax_url,
+                data: {
+                    'action' : 'rbfw_get_stock_edit_form',
+                    'data_id' : data_id,
+                    'nonce' : rbfw_ajax_admin.nonce_get_stock_edit_form
+                },
+                beforeSend: function() {
+                    jQuery('#rbfw_stock_view_result_inner_wrap').empty();
+                    jQuery('#rbfw_stock_view_result_inner_wrap').html('<i class="fas fa-spinner fa-spin rbfw_rp_loader"></i>');
+                },
+                success: function (response) {
+                    jQuery('#rbfw_stock_view_result_inner_wrap').html(response);
+                }
+            });
+        });
+
+        jQuery(document).on('submit', '.rbfw_inv_edit_stock_form', function (e) {
+            e.preventDefault();
+
+            let $form = jQuery(this);
+            let $msg = $form.find('.rbfw_inv_edit_stock_msg');
+            let $save = $form.find('.rbfw_inv_edit_stock_save');
+            let saveLabel = $save.html();
+            let post_id = $form.data('post-id');
+
+            $msg.text('').removeClass('rbfw_inv_msg_error rbfw_inv_msg_success');
+            $save.prop('disabled', true);
+
+            jQuery.ajax({
+                type: 'POST',
+                url: rbfw_ajax_url,
+                dataType: 'json',
+                data: $form.serialize() + '&action=rbfw_update_inventory_stock&post_id=' + encodeURIComponent(post_id) + '&nonce=' + encodeURIComponent(rbfw_ajax_admin.nonce_update_inventory_stock),
+                success: function (response) {
+                    if (response && response.success) {
+                        /* Make the save unmistakable: the button itself turns into a
+                           green "Saved" state (not just a small text line easy to miss
+                           right before the modal auto-closes), and the row's pill(s)
+                           flash briefly once the modal is gone. */
+                        let savedLabel = (typeof rbfwInvI18n !== 'undefined' && rbfwInvI18n.stock_saved) ? rbfwInvI18n.stock_saved : 'Saved!';
+                        $msg.text(savedLabel).addClass('rbfw_inv_msg_success');
+                        $save.addClass('rbfw_inv_modal_btn_saved').html(
+                            '<svg class="rbfw_inv_ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-11"/></svg> ' + savedLabel
+                        );
+
+                        let $row = jQuery('.rbfw_stock_view_details[data-id="' + post_id + '"]').closest('tr.rbfw_inv_row');
+                        let $flashTargets = jQuery();
+
+                        function refreshPill($pill, $soldBadge, newTotal) {
+                            if (newTotal === null || !$pill.length) { return; }
+                            let soldQty = parseFloat($soldBadge.text()) || 0;
+                            let remaining = newTotal - soldQty;
+
+                            $pill.removeClass('full zero');
+                            if (newTotal <= 0 || remaining <= 0) {
+                                $pill.addClass('zero');
+                            } else if (remaining >= newTotal) {
+                                $pill.addClass('full');
+                            }
+                            $pill.text(remaining + '/' + newTotal);
+                            $flashTargets = $flashTargets.add($pill);
+                        }
+
+                        if ($row.length) {
+                            let newTotal = response.data && typeof response.data.total !== 'undefined' ? parseFloat(response.data.total) : null;
+                            refreshPill(
+                                $row.find('.rbfw_inv_stock_wrap .rbfw_inv_pill').first(),
+                                $row.find('.rbfw_inv_qty_badge').first(),
+                                newTotal
+                            );
+
+                            let newEsTotal = response.data && typeof response.data.es_total !== 'undefined' ? parseFloat(response.data.es_total) : null;
+                            refreshPill(
+                                $row.find('.rbfw_inv_td_es_stock .rbfw_inv_pill').first(),
+                                $row.find('.rbfw_inv_td_es_sold .rbfw_inv_qty_badge').first(),
+                                newEsTotal
+                            );
+                        }
+
+                        setTimeout(function () {
+                            if (jQuery.mage_modal && typeof jQuery.mage_modal.isActive === 'function' && jQuery.mage_modal.isActive()) {
+                                jQuery.mage_modal.close();
+                            }
+                            $flashTargets.addClass('rbfw_inv_pill_flash');
+                            setTimeout(function () { $flashTargets.removeClass('rbfw_inv_pill_flash'); }, 1600);
+                        }, 1300);
+                    } else {
+                        let errMsg = (response && response.data && typeof response.data === 'string') ? response.data : 'Something went wrong. Please try again.';
+                        $msg.text(errMsg).addClass('rbfw_inv_msg_error');
+                        $save.prop('disabled', false).html(saveLabel);
+                    }
+                },
+                error: function () {
+                    $msg.text('Something went wrong. Please try again.').addClass('rbfw_inv_msg_error');
+                    $save.prop('disabled', false).html(saveLabel);
+                }
+            });
+        });
         /* end inventory filter and view details */
 
 
@@ -823,8 +1043,8 @@
 
 
         let timePickerEnabled = rbfw_enable_time_picker.val() === 'yes';
-        let hourlyPriceEnabled = rbfw_enable_time_picker.val() === 'yes';
-        let halfDayPriceEnabled = rbfw_enable_time_picker.val() === 'yes';
+        let hourlyPriceEnabled = rbfw_enable_hourly_rate.val() === 'yes';
+        let halfDayPriceEnabled = rbfw_enable_half_day_rate.val() === 'yes';
 
 
 
@@ -852,6 +1072,8 @@
             dailyPriceToggle.toggleClass('active', dailyPriceEnabled);
             dailyPriceInput.prop('disabled', !dailyPriceEnabled);
             rbfw_enable_daily_rate.val(dailyPriceEnabled ? 'yes' : 'no');
+            jQuery('.rbfw-daywise-dailyprice-col').css('display', dailyPriceEnabled ? '' : 'none');
+            updateDaywisePricingVisibility();
         }
 
         function toggleMonthThreshold() {
@@ -880,9 +1102,10 @@
             timePickerEnabled = !timePickerEnabled;
             timePickerToggle.toggleClass('active', timePickerEnabled);
             hourlyPriceItem.css('display', timePickerEnabled ? 'flex' : 'none');
-            hourThresholdItem.css('display', timePickerEnabled ? 'flex' : 'none');
             timeSlotsSection.css('display', timePickerEnabled ? 'block' : 'none');
-            halfDayPriceItem.css('display', halfDayPriceEnabled ? 'flex' : 'none');
+            jQuery('.rbfw-daywise-hourly-col').css('display', (timePickerEnabled && hourlyPriceEnabled) ? '' : 'none');
+            jQuery('.rbfw-daywise-halfday-col').css('display', (timePickerEnabled && halfDayPriceEnabled) ? '' : 'none');
+            updateDaywisePricingVisibility();
 
             const $toggle = jQuery(this);
             const $input = jQuery('.rbfw_enable_time_picker');
@@ -894,14 +1117,110 @@
 
         })
 
+        jQuery('.daywise-price-toggle').on('click', function () {
+            if (jQuery(this).closest('.rbfw-me-wrap').length) {
+                return;
+            }
+            var $toggle  = jQuery(this);
+            var $wrapper = $toggle.closest('#rbfw-daywise-config-wrapper');
+            var $input   = $wrapper.find('input[name="rbfw_enable_daywise_price"]');
+            var $panel   = $wrapper.children('.day-wise-price-configuration');
+            var enabled  = !$toggle.hasClass('active');
+            $toggle.toggleClass('active', enabled);
+            $input.val(enabled ? 'yes' : 'no');
+            if (enabled) {
+                $panel.stop(true, true).slideDown().removeClass('hide').addClass('show');
+            } else {
+                $panel.stop(true, true).slideUp().removeClass('show').addClass('hide');
+            }
+        });
+
+        // Hide "Enable Time Picker" row and force it off when enable_specific_duration is on
+        function syncTimePickerWithSpecificDuration() {
+            var specificDurationOn = jQuery('.enable_specific_duration').is(':checked');
+
+            if ( specificDurationOn && timePickerEnabled ) {
+                timePickerEnabled = false;
+                timePickerToggle.removeClass('active');
+                hourlyPriceItem.css('display', 'none');
+                timeSlotsSection.css('display', 'none');
+                jQuery('.rbfw_enable_time_picker').val('no');
+            }
+        }
+
+        syncTimePickerWithSpecificDuration();
+        jQuery('.enable_specific_duration').on('change', function () {
+            jQuery(this).val(this.checked ? 'on' : 'off');
+            syncTimePickerWithSpecificDuration();
+            syncTimelyColumns();
+        });
+
+        // Sync value attribute and all related UI when timely inventory is toggled
+        jQuery(document).on('change', '[name="manage_inventory_as_timely"]', function () {
+            var isTimely = this.checked;
+            jQuery(this).val(isTimely ? 'on' : 'off');
+            // Direct DOM traversal: stock-quantity section is the immediate next sibling
+            var $stockSection = jQuery(this).closest('section').next('.rbfw_item_stock_quantity');
+            if (isTimely) {
+                $stockSection.removeClass('rbfw_hide').css('display', 'block');
+                $stockSection.find('.rbfw_item_quantiry_duration').css('display', '');
+            } else {
+                $stockSection.addClass('rbfw_hide').css('display', 'none');
+                $stockSection.find('.rbfw_item_quantiry_duration').css('display', 'none');
+            }
+            syncTimelyColumns();
+        });
+
+        // Syncs all timely-dependent columns based on both toggle states:
+        // .duration_enable  — start/end time cols   (timely=on AND specific=on)
+        // .duration_disable — duration/d_type cols  (timely=on AND specific=off)
+        // .rbfw_item_stock_quantity section          (timely=on)
+        // .rbfw_without_time_inventory col           (timely=off)
+        function syncTimelyColumns() {
+            var isTimely   = jQuery('[name="manage_inventory_as_timely"]').is(':checked');
+            var isSpecific = jQuery('[name="enable_specific_duration"]').is(':checked');
+
+            var $stockSection = jQuery('.rbfw_time_inventory.rbfw_item_stock_quantity');
+            if (isTimely) {
+                $stockSection.removeClass('rbfw_hide').css('display', 'block');
+                jQuery('.rbfw_item_quantiry_duration').css('display', '');
+            } else {
+                $stockSection.addClass('rbfw_hide').css('display', 'none');
+                jQuery('.rbfw_item_quantiry_duration').css('display', 'none');
+            }
+
+            if (isTimely) { jQuery('.rbfw_without_time_inventory').hide(); }
+            else          { jQuery('.rbfw_without_time_inventory').show(); }
+
+            if (isTimely && isSpecific)  { jQuery('.rbfw_time_inventory.duration_enable').show(); }
+            else                          { jQuery('.rbfw_time_inventory.duration_enable').hide(); }
+
+            if (isTimely && !isSpecific) { jQuery('.rbfw_time_inventory.duration_disable').show(); }
+            else                          { jQuery('.rbfw_time_inventory.duration_disable').hide(); }
+
+            // Only toggle the single-day Enable Time Picker for bike_car_sd / appointment.
+            // For multiple_items the .rbfw_bike_car_sd_wrapper is already hidden by the rent-type switch.
+            var _currentType = jQuery('#rbfw_item_type').val();
+            if ( _currentType === 'bike_car_sd' || _currentType === 'appointment' ) {
+                if (isTimely && isSpecific)  { jQuery('.rbfw_multi_day_price_conf.rbfw_bike_car_sd_wrapper').hide(); }
+                else                          { jQuery('.rbfw_multi_day_price_conf.rbfw_bike_car_sd_wrapper').show(); }
+            }
+        }
 
 
+        function updateDaywisePricingVisibility() {
+            const atLeastOneEnabled = dailyPriceEnabled || (timePickerEnabled && (hourlyPriceEnabled || halfDayPriceEnabled));
+            jQuery('#rbfw-daywise-config-wrapper').css('display', atLeastOneEnabled ? '' : 'none');
+        }
 
         function toggleHourlyPrice() {
             hourlyPriceEnabled = !hourlyPriceEnabled;
             hourlyPriceToggle.toggleClass('active', hourlyPriceEnabled);
             hourlyPriceInput.prop('disabled', !hourlyPriceEnabled);
             rbfw_enable_hourly_rate.val(hourlyPriceEnabled ? 'yes' : 'no');
+            jQuery('.rbfw-daywise-hourly-col').css('display', (hourlyPriceEnabled && timePickerEnabled) ? '' : 'none');
+            hourThresholdItem.css('display', hourlyPriceEnabled ? 'flex' : 'none');
+            updateDaywisePricingVisibility();
         }
 
         function toggleHalfDayPrice() {
@@ -910,6 +1229,8 @@
             halfDayPriceInput.prop('disabled', !halfDayPriceEnabled);
             rbfw_enable_half_day_rate.val(halfDayPriceEnabled ? 'yes' : 'no');
             halfDayPriceItem.css('display', halfDayPriceEnabled ? 'flex' : 'none');
+            jQuery('.rbfw-daywise-halfday-col').css('display', (halfDayPriceEnabled && timePickerEnabled) ? '' : 'none');
+            updateDaywisePricingVisibility();
         }
 
         // Input change handlers
@@ -1324,19 +1645,6 @@
 
 
 
-    // Daywise price
-    $(document).on('click', 'input[name=rbfw_enable_daywise_price]', function (e) {
-        var status = $(this).val();
-        if (status === 'yes') {
-            $(this).val('no');
-            $('.day-wise-price-configuration').slideUp().removeClass('show').addClass('hide');
-        }
-        if (status === 'no') {
-            $(this).val('yes');
-            $('.day-wise-price-configuration').slideDown().removeClass('hide').addClass('show');
-        }
-    });
-
     $(document).on('click', 'input[name=rbfw_enable_extra_service_qty]', function (e) {
         var status = $(this).val();
         if (status === 'yes') {
@@ -1476,6 +1784,14 @@
         });
         $(".rbfw_resort_price_table_body").sortable();
 
+        if (typeof window.rbfwSpScheduleResortSeasonalSync === 'function') {
+            var $root = jQuery('#rbfw_add_meta_box').first();
+            if (!$root.length) {
+                $root = jQuery('.rbfw-me-wrap').first();
+            }
+            window.rbfwSpScheduleResortSeasonalSync($root.length ? $root : jQuery(document), true);
+        }
+
         var daylong_price_label_val = $('input[name="rbfw_enable_resort_daylong_price"]').val();
 
         if (daylong_price_label_val === 'yes') {
@@ -1578,16 +1894,33 @@
 
         e.preventDefault(); // prevent form submission if inside form
 
-        const time = $(this).closest('.add-slot-form').find('.new-slot-time').val();
-        if (!time) return;
+        const $btn = $(this);
+        const rawTime = $btn.closest('.add-slot-form').find('.new-slot-time').val();
+        if (!rawTime) return;
 
-        const name_attr = $(this).data('name_attr');
-        const rent_type = $(this).data('rent_type');
+        // Convert HH:MM (24-hour from <input type="time">) to 12-hour AM/PM
+        const [_h, _m] = rawTime.split(':').map(Number);
+        const _period = _h >= 12 ? 'PM' : 'AM';
+        const _h12 = _h % 12 || 12;
+        const time = `${_h12}:${String(_m).padStart(2, '0')} ${_period}`;
 
-
+        const name_attr = $btn.data('name_attr');
+        const rent_type = $btn.data('rent_type');
 
         // Get a unique index (based on existing slots)
-        const $timeSlotsContainer = $(this).closest('.add-slot-container').prevAll('.time-slots-container').first().find('.time-slots');
+        const $timeSlotsContainer = $btn.closest('.add-slot-container').prevAll('.time-slots-container').first().find('.time-slots');
+
+        const isDuplicate = $timeSlotsContainer.find('.time-slot-time').filter(function () {
+            return $(this).text() === time;
+        }).length > 0;
+        if (isDuplicate) {
+            $btn.closest('.add-slot-form').find('.rbfw-slot-duplicate-warning').remove();
+            const $warning = $('<span class="rbfw-slot-duplicate-warning" style="display:block;color:#c0392b;font-size:12px;margin-top:4px;"><span class="dashicons dashicons-warning"></span> This time slot already exists.</span>');
+            $btn.after($warning);
+            setTimeout(function () { $warning.remove(); }, 3000);
+            return;
+        }
+
         const index = $timeSlotsContainer.children('.time-slot').length;
         const dataId = $('.rbfw_pdwt_insert').children('.time-slot').length; // Use your actual ID logic here
 
@@ -1602,7 +1935,7 @@
           <input type="hidden" name="${name_attr}[${index}][id]" value="${dataId}">
           <input type="hidden" name="${name_attr}[${index}][time]" value="${time}">
           <input type="hidden" name="${name_attr}[${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
       `;
@@ -1613,7 +1946,7 @@
           <input type="hidden" name="rdfw_available_time_mi[${index}][id]" value="${dataId}">
           <input type="hidden" name="rdfw_available_time_mi[${index}][time]" value="${time}">
           <input type="hidden" name="rdfw_available_time_mi[${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
       `;
@@ -1624,7 +1957,7 @@
           <input type="hidden" name="rdfw_available_time_sd[${index}][id]" value="${dataId}">
           <input type="hidden" name="rdfw_available_time_sd[${index}][time]" value="${time}">
           <input type="hidden" name="rdfw_available_time_sd[${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
       `;
@@ -1642,7 +1975,7 @@
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][id]" value="${dataId}">
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][time]" value="${time}">
           <input type="hidden" name="${name_attr}[${dataId}][available_time][${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
            `;
@@ -1653,7 +1986,7 @@
           <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][id]" value="${dataId}">
           <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][time]" value="${time}">
           <input type="hidden" name="rbfw_particulars_mi[${dataId}][available_time][${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
            `;
@@ -1664,7 +1997,7 @@
           <input type="hidden" name="rbfw_particulars_sd[${dataId}][available_time][${index}][id]" value="${dataId}">
           <input type="hidden" name="rbfw_particulars_sd[${dataId}][available_time][${index}][time]" value="${time}">
           <input type="hidden" name="rbfw_particulars_sd[${dataId}][available_time][${index}][status]" value="enabled">
-          <div class="time-slot-indicator active" title="Click to disable"></div>
+
           <div class="time-slot-remove" title="Remove time slot">×</div>
         </div>
            `;
@@ -1696,6 +2029,9 @@
 
 
     $(document).on('click', '.rbfw_particular_switch', function (e) {
+        if ($(this).closest('.rbfw-me-wrap').length) {
+            return;
+        }
         var status = $(this).val();
         if (status === 'on') {
             $(this).val('off');
@@ -1713,15 +2049,7 @@
         $('.rbfw-single-template').removeClass('active')
         $(this).addClass('active');
 
-        $('.donut-template-sidebar-switch').slideUp();
-        $('.sidebar-testimonial-settigns').slideUp();
-        $('.donut-template-sidebar-content').slideUp();
         $('.additional-gallery').slideUp();
-        if(currentTemplate=='Donut'){
-            $('.donut-template-sidebar-switch').slideDown();
-            $('.sidebar-testimonial-settigns').slideDown();
-            $('.donut-template-sidebar-content').slideDown();
-        }
         if(currentTemplate=='Muffin'){
             $('.additional-gallery').slideDown();
         }
@@ -1814,11 +2142,11 @@ jQuery(document).ready(function () {
             let rbfw_variations_table_last_row = jQuery('.rbfw_variations_table .rbfw_variations_table_row:last-child');
             let rbfw_variations_table_last_data_key = parseInt(rbfw_variations_table_last_row.attr('data-key'));
             let rbfw_variations_table_new_data_key = rbfw_variations_table_last_data_key + 1;
-            let rbfw_variations_table_row = '<div class=rbfw_variations_table_row data-key="' + rbfw_variations_table_new_data_key + '"><header><label for="">Field Label</label><div><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_label]"placeholder="' + rbfw_translation.filed_label + '"> <input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_id]"type=hidden value="rbfw_variation_id_' + rbfw_variations_table_new_data_key + '"></div></header><div class=variations-inner-table><table class="rbfw_variations_value_table form-table w-100"><thead><th>' + rbfw_translation.variation_name + '<th>' + rbfw_translation.stock_quantity + '<b class="required">*</b><th>' + rbfw_translation.is_default + '<th>' + rbfw_translation.actions + '<tbody class=rbfw_variations_value_table_tbody><tr class=rbfw_variations_value_table_row data-key=0><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][name]"placeholder="' + rbfw_translation.variation_name + '" class=rbfw_variation_value><td><input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][quantity]"placeholder="' + rbfw_translation.stock_quantity + '" type=number><td><input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][selected_value]"type=checkbox class=rbfw_variation_selected_value><td><div class=mp_event_remove_move><button class="button remove-rbfw_variations_value_table_row"type=button><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fa-arrows-alt fas"></i></div></div></table><button class="add-new-variation-value mt-2 ppof-button"><i class="fas fa-circle-plus"></i>' + rbfw_translation.add_new_value + '</button></div><div class=mp_event_remove_move><button class=remove-rbfw_variations_table_row type=button><i class="fas fa-trash-can"></i></button></div></div>';
+            let rbfw_variations_table_row = '<div class=rbfw_variations_table_row data-key="' + rbfw_variations_table_new_data_key + '"><header><label for="">Field Label</label><div><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_label]"placeholder="' + rbfw_translation.filed_label + '"> <input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_id]"type=hidden value="rbfw_variation_id_' + rbfw_variations_table_new_data_key + '"></div></header><div class=variations-inner-table><table class="rbfw_variations_value_table form-table w-100"><thead><th>' + rbfw_translation.variation_name + '<th>' + rbfw_translation.stock_quantity + '<b class="required">*</b><th>' + rbfw_translation.is_default + '<th>' + rbfw_translation.actions + '<tbody class=rbfw_variations_value_table_tbody><tr class=rbfw_variations_value_table_row data-key=0><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][name]"placeholder="' + rbfw_translation.variation_name + '" class=rbfw_variation_value><td><input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][quantity]"placeholder="' + rbfw_translation.stock_quantity + '" type=number><td><input type="number" step="0.01" min="0" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][price]" placeholder="Price"></td><td><input name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][selected_value]"type=checkbox class=rbfw_variation_selected_value><td><div class=mp_event_remove_move><button class="button remove-rbfw_variations_value_table_row"type=button><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fa-arrows-alt fas"></i></div></div></table><button class="add-new-variation-value mt-2 ppof-button"><i class="fas fa-circle-plus"></i>' + rbfw_translation.add_new_value + '</button></div><div class=mp_event_remove_move><button class=remove-rbfw_variations_table_row type=button><i class="fas fa-trash-can"></i></button></div></div>';
             jQuery('.rbfw_variations_table').append(rbfw_variations_table_row);
         } else {
             let rbfw_variations_table_new_data_key = 0;
-            let rbfw_variations_table_row = '<tr class="rbfw_variations_table_row" data-key="' + rbfw_variations_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_label]" placeholder="' + rbfw_translation.filed_label + '"><input type="hidden" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_id]" value="rbfw_variation_id_' + rbfw_variations_table_new_data_key + '"></td><td><table class="rbfw_variations_value_table"><thead><th>' + rbfw_translation.stock_quantity + '</th><th>' + rbfw_translation.stock_quantity + '<b class="required">*</b></th><th> ' + rbfw_translation.is_default + '</th><th>' + rbfw_translation.actions + '</th></thead><tbody class="rbfw_variations_value_table_tbody"><tr class="rbfw_variations_value_table_row" data-key="0"><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="checkbox" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr></tbody></table><hr><button class="add-new-variation-value ppof-button"><i class="fas fa-circle-plus"></i>' + rbfw_translation.add_new_value + '</button></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button mp_event_type_sortable_button"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
+            let rbfw_variations_table_row = '<tr class="rbfw_variations_table_row" data-key="' + rbfw_variations_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_label]" placeholder="' + rbfw_translation.filed_label + '"><input type="hidden" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][field_id]" value="rbfw_variation_id_' + rbfw_variations_table_new_data_key + '"></td><td><table class="rbfw_variations_value_table"><thead><th>' + rbfw_translation.stock_quantity + '</th><th>' + rbfw_translation.stock_quantity + '<b class="required">*</b></th><th> ' + rbfw_translation.is_default + '</th><th>' + rbfw_translation.actions + '</th></thead><tbody class="rbfw_variations_value_table_tbody"><tr class="rbfw_variations_value_table_row" data-key="0"><td><input type="text" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="number" step="0.01" min="0" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][value][0][price]" placeholder="Price"></td><td><input type="checkbox" name="rbfw_variations_data[' + rbfw_variations_table_new_data_key + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr></tbody></table><hr><button class="add-new-variation-value ppof-button"><i class="fas fa-circle-plus"></i>' + rbfw_translation.add_new_value + '</button></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button mp_event_type_sortable_button"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
             jQuery('.rbfw_variations_table').append(rbfw_variations_table_row);
         }
         rbfw_variation_table_action_btns_func();
@@ -1837,11 +2165,11 @@ jQuery(document).ready(function () {
                 let rbfw_variations_value_table_last_row = jQuery(this_btn).siblings('.rbfw_variations_value_table').find('.rbfw_variations_value_table_row:last-child');
                 let rbfw_variations_value_table_last_data_key = parseInt(rbfw_variations_value_table_last_row.attr('data-key'));
                 let rbfw_variations_value_table_new_data_key = rbfw_variations_value_table_last_data_key + 1;
-                let rbfw_variations_value_table_row = '<tr class="rbfw_variations_value_table_row" data-key="' + rbfw_variations_value_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="checkbox" name="rbfw_variations_data[' + c + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
+                let rbfw_variations_value_table_row = '<tr class="rbfw_variations_value_table_row" data-key="' + rbfw_variations_value_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="number" step="0.01" min="0" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][price]" placeholder="Price"></td><td><input type="checkbox" name="rbfw_variations_data[' + c + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
                 jQuery(this_btn).siblings('.rbfw_variations_value_table').append(rbfw_variations_value_table_row);
             } else {
                 let rbfw_variations_value_table_new_data_key = 0;
-                let rbfw_variations_value_table_row = '<tr class="rbfw_variations_value_table_row" data-key="' + rbfw_variations_value_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="checkbox" name="rbfw_variations_data[' + c + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
+                let rbfw_variations_value_table_row = '<tr class="rbfw_variations_value_table_row" data-key="' + rbfw_variations_value_table_new_data_key + '"><td><input type="text" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][name]" placeholder="' + rbfw_translation.variation_name + '" class="rbfw_variation_value"></td><td><input type="number" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][quantity]" placeholder="' + rbfw_translation.stock_quantity + '"></td><td><input type="number" step="0.01" min="0" name="rbfw_variations_data[' + c + '][value][' + rbfw_variations_value_table_new_data_key + '][price]" placeholder="Price"></td><td><input type="checkbox" name="rbfw_variations_data[' + c + '][selected_value]" class="rbfw_variation_selected_value"></td><td><div class="mp_event_remove_move"><button class="button remove-rbfw_variations_value_table_row" type="button"><i class="fas fa-trash-can"></i></button><div class="button rbfw_variations_value_table_row_sortable"><i class="fas fa-arrows-alt"></i></div></div></td></tr>';
                 jQuery(this_btn).siblings('.rbfw_variations_value_table').append(rbfw_variations_value_table_row);
             }
             rbfw_variation_table_action_btns_func();

@@ -104,7 +104,7 @@
 							$rent_type       = $ticket_info['rbfw_rent_type'];
 							$rbfw_start_time = ! empty( $ticket_info['rbfw_start_time'] ) ? $ticket_info['rbfw_start_time'] : '';
 							$rbfw_end_time   = ! empty( $ticket_info['rbfw_end_time'] ) ? $ticket_info['rbfw_end_time'] : '';
-							if ( $rent_type == 'resort' || ( empty( $rbfw_start_time ) && empty( $rbfw_end_time ) ) ) {
+							if ( $rent_type == 'resort' || ! rbfw_booking_has_time( $rbfw_start_time ) ) {
 								$rbfw_start_datetime = rbfw_get_datetime( $ticket_info['rbfw_start_datetime'], 'date-text' );
 								$rbfw_end_datetime   = rbfw_get_datetime( $ticket_info['rbfw_end_datetime'], 'date-text' );
 							} elseif ( $rent_type == 'bike_car_sd' || $rent_type == 'appointment' ) {
@@ -338,9 +338,10 @@
                                             <td>
                                                 <ol>
 													<?php
-														foreach ( $rbfw_regf_info as $info ) {
+														foreach ( rbfw_regf_display_rows( $ticket_info ) as $info ) {
 															$label = $info['label'];
 															$value = $info['value'];
+											if ( ! empty( $info['heading'] ) ) { echo '<li style="list-style:none;margin-top:8px;font-weight:600">' . esc_html( $label ) . '</li>'; continue; }
 															if ( filter_var( $value, FILTER_VALIDATE_URL ) ) {
 																$value = '<a href="' . esc_url( $value ) . '" target="_blank" style="text-decoration:underline">' . esc_html__( 'View File', 'booking-and-rental-manager-for-woocommerce' ) . '</a>';
 															}
@@ -367,8 +368,8 @@
 										foreach ( $variation_info as $key => $value ) {
 											?>
                                             <tr>
-                                                <td><strong><?php echo esc_html( $value['field_label'] ); ?></strong></td>
-                                                <td><?php echo esc_html( $value['field_value'] ); ?></td>
+                                                <td><strong><?php echo esc_html( $value['field_label'] ?? '' ); ?></strong></td>
+                                                <td><?php echo esc_html( $value['field_value'] ?? '' ); ?></td>
                                             </tr>
 										<?php }
 									} ?>
@@ -642,9 +643,10 @@
                                     <td>
                                         <ol>
 											<?php
-												foreach ( $rbfw_regf_info as $info ) {
+												foreach ( rbfw_regf_display_rows( $ticket_info ) as $info ) {
 													$label = $info['label'];
 													$value = $info['value'];
+											if ( ! empty( $info['heading'] ) ) { echo '<li style="list-style:none;margin-top:8px;font-weight:600">' . esc_html( $label ) . '</li>'; continue; }
 													if ( filter_var( $value, FILTER_VALIDATE_URL ) ) {
 														$value = '<a href="' . esc_url( $value ) . '" target="_blank" style="text-decoration:underline">' . esc_html__( 'View File', 'booking-and-rental-manager-for-woocommerce' ) . '</a>';
 													}
@@ -671,8 +673,8 @@
 								foreach ( $variation_info as $key => $value ) {
 									?>
                                     <tr>
-                                        <td><strong><?php echo esc_html( $value['field_label'] ); ?></strong></td>
-                                        <td><?php echo esc_html( $value['field_value'] ); ?></td>
+                                        <td><strong><?php echo esc_html( $value['field_label'] ?? '' ); ?></strong></td>
+                                        <td><?php echo esc_html( $value['field_value'] ?? '' ); ?></td>
                                     </tr>
 								<?php }
 							} ?>

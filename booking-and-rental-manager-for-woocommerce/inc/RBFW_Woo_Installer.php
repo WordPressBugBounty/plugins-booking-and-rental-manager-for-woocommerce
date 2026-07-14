@@ -84,6 +84,12 @@ if ( ! class_exists( 'RBFW_Woo_Installer' ) ) {
 		 * @return bool
 		 */
 		private function should_show_popup() {
+			// WooCommerce is now optional: do not force the installer popup once the admin
+			// has chosen to continue in Standalone mode (dismissed the notice). The plugin
+			// is fully usable without WooCommerce.
+			if ( get_option( 'rbfw_standalone_dismissed' ) === 'yes' ) {
+				return false;
+			}
 			return ! $this->is_woo_active();
 		}
 
@@ -132,6 +138,7 @@ if ( ! class_exists( 'RBFW_Woo_Installer' ) ) {
 		 * Render the popup HTML in admin footer.
 		 */
 		public function render_popup() {
+			return false;
 			if ( ! $this->should_show_popup() ) {
 				return;
 			}
@@ -240,6 +247,18 @@ if ( ! class_exists( 'RBFW_Woo_Installer' ) ) {
 				wp_send_json_error( array( 'message' => __( 'You do not have permission to install plugins.', 'booking-and-rental-manager-for-woocommerce' ) ) );
 			}
 
+			// Download + unzip is the heaviest part of the flow; give it room.
+			if ( function_exists( 'wp_raise_memory_limit' ) ) {
+				wp_raise_memory_limit( 'admin' );
+			}
+			@set_time_limit( 0 );
+			@ignore_user_abort( true );
+
+			// Already installed? Skip straight to activation on the client.
+			if ( $this->is_woo_installed() ) {
+				wp_send_json_success( array( 'message' => __( 'WooCommerce is already installed.', 'booking-and-rental-manager-for-woocommerce' ) ) );
+			}
+
 			include_once ABSPATH . 'wp-admin/includes/plugin-install.php';
 			include_once ABSPATH . 'wp-admin/includes/file.php';
 			include_once ABSPATH . 'wp-admin/includes/misc.php';
@@ -290,6 +309,12 @@ if ( ! class_exists( 'RBFW_Woo_Installer' ) ) {
 			if ( ! current_user_can( 'activate_plugins' ) ) {
 				wp_send_json_error( array( 'message' => __( 'You do not have permission to activate plugins.', 'booking-and-rental-manager-for-woocommerce' ) ) );
 			}
+
+			// WooCommerce runs installers on activation; give it room too.
+			if ( function_exists( 'wp_raise_memory_limit' ) ) {
+				wp_raise_memory_limit( 'admin' );
+			}
+			@set_time_limit( 0 );
 
 			$result = activate_plugin( 'woocommerce/woocommerce.php' );
 

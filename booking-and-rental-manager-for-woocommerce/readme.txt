@@ -165,7 +165,9 @@ Appsero does not collect data by default. Data collection starts only after user
 Learn more about how [Appsero collects and uses data](https://appsero.com/privacy-policy/).
 
 == Changelog ==
-
+2.7.2
+Code updated and minor bug fixes.
+Big Design Improvemnt
 
 2.7.1
 Code updated and minor bug fixes.

@@ -348,16 +348,16 @@
 				if ( ! is_array( $categories ) || count( $categories ) === 0 ) {
 					return '';
 				}
-				$group = array( 'relation' => 'OR' );
-				foreach ( $categories as $category_name ) {
-					$clause = rbfw_build_category_meta_clause( $category_name );
-					if ( ! empty( $clause ) ) {
-						$group[] = $clause;
-					}
-				}
+				// Flatten every selected category into ONE OR group so the query
+				// uses a single wp_postmeta JOIN regardless of how many
+				// categories are chosen. Building a nested group per category
+				// (the previous approach) forced a separate self-JOIN each, and
+				// the base + active category filters together were slow enough
+				// to hit the nginx/php-fpm timeout (504 Gateway Time-out).
+				$group = rbfw_build_categories_meta_clause( $categories );
 
 				// Only return a usable group when at least one clause was added.
-				return ( count( $group ) > 1 ) ? $group : '';
+				return ! empty( $group ) ? $group : '';
 			}
 
 			public function display_filter_rent_items( $post_id, $post_title, $the_content, $style, $d ) {
@@ -539,7 +539,7 @@
 						$rent_item_info       = 'rbfw_rent_list_lists_info';
 						$rent_item_list_info  = 'rbfw_rent_item_content_list_bottom';
 						$is_display           = 'grid';
-						$display_cat_features = 5;
+						$display_cat_features = 3;
 					}
 				} else {
 					if ( $rbfw_rent_item_list_grid == 'rbfw_rent_item_grid' ) {
@@ -553,7 +553,7 @@
 						$rent_item_info       = 'rbfw_rent_list_lists_info';
 						$rent_item_list_info  = 'rbfw_rent_item_content_list_bottom';
 						$is_display           = 'grid';
-						$display_cat_features = 5;
+						$display_cat_features = 3;
 					}
 				}
 				ob_start()
@@ -619,7 +619,34 @@
 										$n ++;
 									endforeach;
 								endif;
-								?>
+								// Hidden popup data — all categories and features pre-built for instant popup display
+								if ( $rbfw_feature_category ) : ?>
+								<div id="rbfw_feature_popup_data-<?php echo esc_attr( $post_id ); ?>" style="display:none">
+									<div class="rbfw_show_all_cat_features rbfw_show_all_cat_title" id="rbfw_show_all_cat_features-<?php echo esc_attr( $post_id ); ?>">
+										<?php foreach ( $rbfw_feature_category as $fc_val ) :
+											$fc_title    = ! empty( $fc_val['cat_title'] ) ? $fc_val['cat_title'] : '';
+											$fc_features = ! empty( $fc_val['cat_features'] ) ? $fc_val['cat_features'] : [];
+											if ( ! empty( $fc_features ) ) :
+												if ( $fc_title ) : ?>
+													<h2 class="rbfw_popup_fearure_title rbfw_popup_fearure_title_color"><?php echo esc_html( $fc_title ); ?></h2>
+												<?php endif; ?>
+												<ul class="rbfw_popup_fearure_lists">
+													<?php foreach ( $fc_features as $fc_feat ) :
+														$fc_icon       = ! empty( $fc_feat['icon'] ) ? $fc_feat['icon'] : 'fas fa-check-circle';
+														$fc_feat_title = ! empty( $fc_feat['title'] ) ? $fc_feat['title'] : '';
+														if ( $fc_feat_title ) : ?>
+														<li class="bfw_rent_list_items">
+															<span class="bfw_rent_list_items_icon"><i class="<?php echo esc_attr( $fc_icon ); ?>"></i></span>
+															<?php echo esc_html( $fc_feat_title ); ?>
+														</li>
+														<?php endif;
+													endforeach; ?>
+												</ul>
+											<?php endif;
+										endforeach; ?>
+									</div>
+								</div>
+								<?php endif; ?>
                                 <div class="rbfw_rent_list_btn_holder">
                                     <div class="rbfw_rent_list_grid_row rbfw_pricing-box">
                                         <p class="rbfw_rent_list_row_price"><span class="prc currency_left"><?php echo wp_kses( wc_price( $price ) , rbfw_allowed_html()); ?></span></p>

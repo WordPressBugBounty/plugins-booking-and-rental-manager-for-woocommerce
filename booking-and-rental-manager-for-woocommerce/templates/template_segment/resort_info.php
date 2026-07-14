@@ -6,10 +6,10 @@ check_ajax_referer( 'rbfw_check_resort_availibility_action', 'nonce' );
 $start_date = isset( $_POST['checkin_date'] ) ? sanitize_text_field( wp_unslash( $_POST['checkin_date'] ) ) : '';
 $end_date   = isset( $_POST['checkout_date'] ) ? sanitize_text_field( wp_unslash( $_POST['checkout_date'] ) ) : '';
 $post_id    = isset( $_POST['post_id'] ) ? intval( sanitize_text_field( wp_unslash( $_POST['post_id'] ) ) ) : '';
-$origin     = date_create( $start_date );
-$target     = date_create( $end_date );
-$interval   = date_diff( $origin, $target );
-$total_days = $interval->format( '%a' );
+$origin     = $start_date ? date_create( $start_date ) : false;
+$target     = $end_date ? date_create( $end_date ) : false;
+$interval   = ( $origin && $target ) ? date_diff( $origin, $target ) : false;
+$total_days = $interval ? $interval->format( '%a' ) : 0;
 
 
 if ($total_days ) {
@@ -33,12 +33,19 @@ if(isset($post_id) && isset($active_tab)){
     $available_qty_info_switch = get_post_meta($post_id, 'rbfw_available_qty_info_switch', true) ? get_post_meta($post_id, 'rbfw_available_qty_info_switch', true) : 'no';
 
     ?>
+    <style>
+        .rbfw_resort_rt_price_table .rbfw-room-price { display: flex; flex-direction: column; gap: 2px; line-height: 1.25; }
+        .rbfw_resort_rt_price_table .rbfw-room-price__rate { white-space: nowrap; font-weight: 600; }
+        .rbfw_resort_rt_price_table .rbfw-room-price__unit { font-weight: 400; font-size: 11px; color: #8a94a6; margin-left: 1px; }
+        .rbfw_resort_rt_price_table .rbfw-room-price__stay { white-space: nowrap; font-size: 11px; color: #121511; border: #ff00002e solid 1px; border-radius: 10px; padding: 3px; background-color: #ff00001c; }
+    </style>
 
-    <div class="rbfw-single-right-heading" style="margin-top: 10px;margin-bottom:0;text-align:center;">
+    <div class="rbfw-single-right-heading" style="margin-top: 10px;margin-bottom:0;">
+        <i class="fas fa-clock rbfw-srh-icon"></i>
         <?php if($active_tab=='daylong'){ ?>
-            <p><?php echo esc_html($total_days) ?> <?php esc_html_e('Daylong only day stay','booking-and-rental-manager-for-woocommerce'); ?> </p>
+            <span><?php echo esc_html($total_days) ?> <?php esc_html_e('Daylong only day stay','booking-and-rental-manager-for-woocommerce'); ?></span>
         <?php } if($active_tab=='daynight'){  ?>
-            <p><?php echo esc_html($total_days) ?> <?php esc_html_e('Day night stay','booking-and-rental-manager-for-woocommerce'); ?></p>
+            <span><?php echo esc_html($total_days) ?> <?php esc_html_e('Day night stay','booking-and-rental-manager-for-woocommerce'); ?></span>
         <?php } ?>
     </div>
 
@@ -46,11 +53,12 @@ if(isset($post_id) && isset($active_tab)){
     <input type="hidden" name="resort_total_days" id="resort_total_days" value="<?php echo esc_attr($total_days); ?>"/>
 
     <div class="rbfw_resort_rt_price_table_container">
+        <div class="rbfw-room-select-title"><?php esc_html_e( 'Select Room Type', 'booking-and-rental-manager-for-woocommerce' ); ?></div>
         <table class="rbfw_room_price_table rbfw_resort_rt_price_table">
             <thead>
             <tr>
                 <th><?php echo esc_html__( 'Room Type','booking-and-rental-manager-for-woocommerce' ); ?></th>
-                <th><?php echo esc_html__( 'Image','booking-and-rental-manager-for-woocommerce' ); ?></th>
+                <th class="rbfw-room-img-hidden-col"><?php echo esc_html__( 'Image','booking-and-rental-manager-for-woocommerce' ); ?></th>
                 <th><?php echo esc_html__( 'Price','booking-and-rental-manager-for-woocommerce' ); ?></th>
                 <th class="w_30_pc"> <?php echo esc_html__( 'Quantity','booking-and-rental-manager-for-woocommerce' ); ?></th>
             </tr>
@@ -59,6 +67,16 @@ if(isset($post_id) && isset($active_tab)){
 
             <?php
             $i = 0;
+
+            // Per-night / per-day unit labels so the room price clearly relates
+            // to the selected day-night stay length (e.g. "$400 / night" and the
+            // "$1,200 / 3 nights" stay total), helping the customer understand it.
+            $rbfw_room_unit        = ( $active_tab === 'daylong' )
+                ? __( 'day', 'booking-and-rental-manager-for-woocommerce' )
+                : __( 'night', 'booking-and-rental-manager-for-woocommerce' );
+            $rbfw_room_unit_plural = ( $active_tab === 'daylong' )
+                ? _n( 'day', 'days', (int) $total_days, 'booking-and-rental-manager-for-woocommerce' )
+                : _n( 'night', 'nights', (int) $total_days, 'booking-and-rental-manager-for-woocommerce' );
 
             foreach ($rbfw_resort_room_data as $key => $value) {
                 $img_url    = wp_get_attachment_url($value['rbfw_room_image']);
@@ -88,21 +106,36 @@ if(isset($post_id) && isset($active_tab)){
                 ?>
 
                 <tr>
-                    <td>
-                        <span class="room_type_title"><?php echo esc_html($value['room_type']) ?></span>
-                        <input type="hidden" name="rbfw_room_info[<?php echo esc_attr($i); ?>][room_type]" value="<?php echo esc_attr($value['room_type']); ?>"/>
-                        <?php if($value['rbfw_room_desc']) { ?>
-                            <small class="rbfw_room_desc">
-                                <?php echo esc_html($value['rbfw_room_desc']); ?>
-                            </small>
-                            <?php if ($available_qty_info_switch == 'yes') {  ?>
-                                <small class="rbfw_available_qty_notice"><?php echo esc_html__( 'Available:', 'booking-and-rental-manager-for-woocommerce' ) . esc_html($max_available_qty); ?></small>
+                    <td class="rbfw-room-type-name-cell">
+                        <div class="rbfw-room-thumb-wrap">
+                            <?php if ( $img_url ) : ?>
+                                <a href="#rbfw_room_img_<?php echo esc_attr( $uniq_id ); ?>" rel="mage_modal:open">
+                                    <img src="<?php echo esc_url( $img_url ); ?>" alt="<?php echo esc_attr( $value['room_type'] ); ?>">
+                                </a>
+                            <?php else : ?>
+                                <span class="rbfw-room-no-img"><i class="fas fa-image"></i></span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="rbfw-room-name-desc">
+                            <span class="room_type_title"><?php echo esc_html($value['room_type']) ?></span>
+                            <input type="hidden" name="rbfw_room_info[<?php echo esc_attr($i); ?>][room_type]" value="<?php echo esc_attr($value['room_type']); ?>"/>
+                            <?php if($value['rbfw_room_desc']) { ?>
+                                <small class="rbfw_room_desc">
+                                    <?php echo esc_html($value['rbfw_room_desc']); ?>
+                                </small>
+                                <?php if ($available_qty_info_switch == 'yes') {  ?>
+                                    <small class="rbfw_available_qty_notice"><?php echo esc_html__( 'Available:', 'booking-and-rental-manager-for-woocommerce' ) . esc_html($max_available_qty); ?></small>
+                                <?php  } ?>
+                                <input type="hidden" name="rbfw_room_info[<?php echo  esc_attr($i); ?>][room_desc]" value="<?php echo  esc_attr($value['rbfw_room_desc']); ?>"/>
                             <?php  } ?>
-                            <input type="hidden" name="rbfw_room_info[<?php echo  esc_attr($i); ?>][room_desc]" value="<?php echo  esc_attr($value['rbfw_room_desc']); ?>"/>
-                        <?php  } ?>
+                        </div>
                     </td>
-                    <td>
-                        <?php echo wp_kses($img , rbfw_allowed_html()); ?>
+                    <td class="rbfw-room-img-hidden-col">
+                        <?php if ( $img_url ) : ?>
+                            <div id="rbfw_room_img_<?php echo esc_attr( $uniq_id ); ?>" class="mage_modal">
+                                <img src="<?php echo esc_url( $img_url ); ?>">
+                            </div>
+                        <?php endif; ?>
                     </td>
                     <?php if ( is_plugin_active( 'booking-and-rental-manager-seasonal-pricing/rent-seasonal-pricing.php' ) || is_plugin_active( 'multi-day-price-saver-addon-for-wprently/additional-day-price.php' ) || is_plugin_active( 'tiered-pricing-addon-wprently/tiered-pricing-addon.php' ) ) {  ?>
 
@@ -162,7 +195,12 @@ if(isset($post_id) && isset($active_tab)){
 
                         <?php }else{ ?>
                             <td>
-                                <?php echo wp_kses(wc_price($price) , rbfw_allowed_html()); ?>
+                                <div class="rbfw-room-price">
+                                    <span class="rbfw-room-price__rate"><?php echo wp_kses( wc_price( $price ), rbfw_allowed_html() ); ?><span class="rbfw-room-price__unit">/<?php echo esc_html( $rbfw_room_unit ); ?></span></span>
+                                    <?php if ( (int) $total_days > 0 ) : ?>
+                                        <span class="rbfw-room-price__stay"><?php echo wp_kses( wc_price( (float) $price * (int) $total_days ), rbfw_allowed_html() ); ?> · <?php echo esc_html( $total_days . ' ' . $rbfw_room_unit_plural ); ?></span>
+                                    <?php endif; ?>
+                                </div>
                                 <input type="hidden" name="rbfw_room_info[<?php echo esc_attr($i); ?>][room_price]" value="<?php echo esc_attr($price); ?>"/>
                             </td>
                         <?php } ?>
@@ -170,7 +208,12 @@ if(isset($post_id) && isset($active_tab)){
 
                     <?php }else{ ?>
                         <td>
-                            <?php echo wp_kses(wc_price($price) , rbfw_allowed_html()); ?>
+                            <div class="rbfw-room-price">
+                                <span class="rbfw-room-price__rate"><?php echo wp_kses( wc_price( $price ), rbfw_allowed_html() ); ?><span class="rbfw-room-price__unit">/<?php echo esc_html( $rbfw_room_unit ); ?></span></span>
+                                <?php if ( (int) $total_days > 0 ) : ?>
+                                    <span class="rbfw-room-price__stay"><?php echo wp_kses( wc_price( (float) $price * (int) $total_days ), rbfw_allowed_html() ); ?> · <?php echo esc_html( $total_days . ' ' . $rbfw_room_unit_plural ); ?></span>
+                                <?php endif; ?>
+                            </div>
                             <input type="hidden" name="rbfw_room_info[<?php echo esc_attr($i); ?>][room_price]" value="<?php echo esc_attr($price); ?>"/>
                         </td>
                     <?php } ?>
@@ -200,14 +243,14 @@ if(isset($post_id) && isset($active_tab)){
 
     <?php $extra_service_enable = false; if(!empty($rbfw_extra_service_data)) { $extra_service_enable = true;  ?>
         <div class="rbfw_resort_es_price_table">
-            <div class="rbfw-single-right-heading">
+            <div class="rbfw-room-select-title">
                 <?php esc_html_e('Additional Services You may like.','booking-and-rental-manager-for-woocommerce'); ?>
             </div>
-            <table class="rbfw_room_price_table">
+            <table class="rbfw_room_price_table rbfw_resort_es_rt_price_table">
                 <thead>
                 <tr>
                     <th><?php echo esc_html__( 'Service Name', 'booking-and-rental-manager-for-woocommerce' ); ?></th>
-                    <th><?php echo esc_html__( 'Image', 'booking-and-rental-manager-for-woocommerce' ); ?></th>
+                    <th class="rbfw-room-img-hidden-col"><?php echo esc_html__( 'Image', 'booking-and-rental-manager-for-woocommerce' ); ?></th>
                     <th><?php echo esc_html__( 'Price', 'booking-and-rental-manager-for-woocommerce' ); ?></th>
                     <th class="w_30_pc"><?php echo esc_html__( 'Quantity', 'booking-and-rental-manager-for-woocommerce' ); ?></th>
                 </tr>
@@ -231,21 +274,36 @@ if(isset($post_id) && isset($active_tab)){
 
                     if ($value['service_qty'] > 0) {  ?>
                         <tr>
-                            <td>
-                                <?php echo esc_html($value['service_name']); ?>
-                                <input type="hidden" name="rbfw_service_info[<?php echo  esc_attr($c); ?>][service_name]" value="<?php echo esc_attr($value['service_name']); ?>"/>
-                                <?php if (isset($value['service_desc']) && $value['service_desc']) { ?>
-                                    <small class="rbfw_room_desc">
-                                        <?php echo esc_html($value['service_desc']); ?>
-                                    </small>
-                                <?php } ?>
-                                <?php if ($available_qty_info_switch == 'yes') { ?>
-                                    <small class="rbfw_available_qty_notice"><?php echo esc_html__( 'Available:', 'booking-and-rental-manager-for-woocommerce' ) . esc_html($max_es_available_qty); ?></small>
-                                <?php } ?>
-                                <input type="hidden" name="rbfw_service_info[<?php echo esc_attr($c); ?>][service_desc]" value="<?php echo esc_attr(isset($value['service_desc'])?$value['service_desc']:''); ?>"/>
+                            <td class="rbfw-room-type-name-cell">
+                                <div class="rbfw-room-thumb-wrap">
+                                    <?php if ( $img_url ) : ?>
+                                        <a href="#rbfw_room_img_<?php echo esc_attr( $uniq_id ); ?>" rel="mage_modal:open">
+                                            <img src="<?php echo esc_url( $img_url ); ?>" alt="<?php echo esc_attr( $value['service_name'] ); ?>">
+                                        </a>
+                                    <?php else : ?>
+                                        <span class="rbfw-room-no-img"><i class="fas fa-concierge-bell"></i></span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="rbfw-room-name-desc">
+                                    <span class="room_type_title"><?php echo esc_html($value['service_name']); ?></span>
+                                    <input type="hidden" name="rbfw_service_info[<?php echo  esc_attr($c); ?>][service_name]" value="<?php echo esc_attr($value['service_name']); ?>"/>
+                                    <?php if (isset($value['service_desc']) && $value['service_desc']) { ?>
+                                        <small class="rbfw_room_desc">
+                                            <?php echo esc_html($value['service_desc']); ?>
+                                        </small>
+                                    <?php } ?>
+                                    <?php if ($available_qty_info_switch == 'yes') { ?>
+                                        <small class="rbfw_available_qty_notice"><?php echo esc_html__( 'Available:', 'booking-and-rental-manager-for-woocommerce' ) . esc_html($max_es_available_qty); ?></small>
+                                    <?php } ?>
+                                    <input type="hidden" name="rbfw_service_info[<?php echo esc_attr($c); ?>][service_desc]" value="<?php echo esc_attr(isset($value['service_desc'])?$value['service_desc']:''); ?>"/>
+                                </div>
                             </td>
-                            <td>
-                                <?php echo wp_kses($img , rbfw_allowed_html()); ?>
+                            <td class="rbfw-room-img-hidden-col">
+                                <?php if ( $img_url ) : ?>
+                                    <div id="rbfw_room_img_<?php echo esc_attr( $uniq_id ); ?>" class="mage_modal">
+                                        <img src="<?php echo esc_url( $img_url ); ?>">
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php echo wp_kses(wc_price($value['service_price']) , rbfw_allowed_html()); ?>
@@ -432,9 +490,16 @@ if(class_exists('Rbfw_Reg_Form')){
     <input type="hidden" name="rbfw_management_price_resort" id="rbfw_management_price_resort" value="0"/>
     <?php do_action('rbfw_add_term_condition',$post_id) ?>
     <div class="item rbfw_text_book_now">
-        <button type="submit" name="add-to-cart" value="<?php echo esc_attr($rbfw_product_id); ?>" class="mp_rbfw_book_now_submit single_add_to_cart_button button alt btn-mep-event-cart rbfw-book-now-btn rbfw_resort_book_now_btn rbfw_disabled_button" disabled>
-            <?php echo esc_html__( 'Book Now','booking-and-rental-manager-for-woocommerce' ); ?>
-        </button>
+        <?php if ( ! rbfw_is_booking_available() ) { ?>
+            <p class="rbfw_booking_unavailable_msg" style="background:#fff3cd;color:#856404;padding:10px 14px;border-left:4px solid #ffc107;border-radius:4px;margin:0 0 10px;font-size:13px;"><i class="fas fa-exclamation-triangle" style="margin-right:6px;color:#e0a800;"></i><?php esc_html_e( 'Booking currently not possible. Please contact us directly to complete your booking.', 'booking-and-rental-manager-for-woocommerce' ); ?></p>
+            <button type="button" class="mp_rbfw_book_now_submit single_add_to_cart_button button alt btn-mep-event-cart rbfw-book-now-btn rbfw_disabled_button" disabled style="opacity:.55;cursor:not-allowed;" title="<?php esc_attr_e( 'Booking is currently not possible. Please contact us directly.', 'booking-and-rental-manager-for-woocommerce' ); ?>">
+                <?php echo esc_html__( 'Book Now','booking-and-rental-manager-for-woocommerce' ); ?>
+            </button>
+        <?php } else { ?>
+            <button type="submit" name="add-to-cart" value="<?php echo esc_attr($rbfw_product_id); ?>" class="mp_rbfw_book_now_submit single_add_to_cart_button button alt btn-mep-event-cart rbfw-book-now-btn rbfw_resort_book_now_btn rbfw_disabled_button" disabled>
+                <?php echo esc_html__( 'Book Now','booking-and-rental-manager-for-woocommerce' ); ?>
+            </button>
+        <?php } ?>
     </div>
 <?php }else{ ?>
     <div class="rbfw_alert_warning">

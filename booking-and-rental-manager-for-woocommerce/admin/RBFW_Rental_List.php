@@ -22,7 +22,6 @@ if (!class_exists('RBFW_Rental_List')) {
         public function __construct()
         {
             add_action('admin_menu', array($this, 'register_page'));
-            add_action('admin_action_rbfw_duplicate_post', [$this, 'rbfw_duplicate_post_function']);
             // New design wiring.
             add_filter('rbfw_settings_field', [$this, 'register_setting']);
             add_action('load-edit.php', [$this, 'maybe_redirect_to_new_design']);
@@ -161,12 +160,14 @@ if (!class_exists('RBFW_Rental_List')) {
         private function get_items($statuses = array('publish', 'draft', 'pending', 'private')): array
         {
             $query = new WP_Query(array(
-                'post_type'      => 'rbfw_item',
-                'post_status'    => $statuses,
-                'posts_per_page' => -1,
-                'orderby'        => 'date',
-                'order'          => 'DESC',
-                'no_found_rows'  => true,
+                'post_type'              => 'rbfw_item',
+                'post_status'            => $statuses,
+                'posts_per_page'         => -1,
+                'orderby'                => 'date',
+                'order'                  => 'DESC',
+                'no_found_rows'          => true,
+                'update_post_meta_cache' => true,
+                'update_term_meta_cache' => true,
             ));
             $rent_types = RBFW_Function::rbfw_rent_types();
             $items = array();
@@ -191,6 +192,9 @@ if (!class_exists('RBFW_Rental_List')) {
                     'trash_link' => get_delete_post_link($pid),
                     'restore_link' => wp_nonce_url(admin_url(sprintf('post.php?post=%d&action=untrash', $pid)), 'untrash-post_' . $pid),
                     'delete_link'  => get_delete_post_link($pid, '', true),
+                    // Reuses the existing secure duplicator (RBFW_Rent_Manager::duplicate_post_link /
+                    // rbfw_duplicate_post on admin_init): capability-checked and resets inventory on the copy.
+                    'duplicate_link' => wp_nonce_url(admin_url('edit.php?post_type=rbfw_item&rbfw_duplicate=' . $pid), 'duplicate_post_action', 'nonce'),
                 );
             }
 
@@ -276,8 +280,7 @@ if (!class_exists('RBFW_Rental_List')) {
             $items     = $is_trash ? $this->get_items(array('trash')) : $active;
             $base_url  = admin_url('admin.php?page=' . self::PAGE_SLUG);
             $trash_url = add_query_arg('rbfw_status', 'trash', $base_url);
-            $add_url   = admin_url('post-new.php?post_type=rbfw_item');
-            $classic   = admin_url('edit.php?post_type=rbfw_item&rbfw_view=classic');
+            $add_url   = class_exists( 'RBFW_Modern_Editor' ) ? RBFW_Modern_Editor::add_new_url() : admin_url( 'post-new.php?post_type=rbfw_item' );
             $rent_types = RBFW_Function::rbfw_rent_types();
             ?>
             <div class="wrap rbfw-fleet-wrap">
@@ -288,10 +291,6 @@ if (!class_exists('RBFW_Rental_List')) {
                             <span><?php echo esc_html(sprintf(_n('%d item', '%d items', $total, 'booking-and-rental-manager-for-woocommerce'), $total)); ?></span>
                         </div>
                         <div class="rbfw-header-actions">
-                            <a class="rbfw-classic-link" href="<?php echo esc_url($classic); ?>">
-                                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                                <?php esc_html_e('Classic view', 'booking-and-rental-manager-for-woocommerce'); ?>
-                            </a>
                             <a class="rbfw-add-btn" href="<?php echo esc_url($add_url); ?>">
                                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                 <?php printf(esc_html__('Add New %s', 'booking-and-rental-manager-for-woocommerce'), esc_html($name)); ?>
@@ -416,6 +415,9 @@ if (!class_exists('RBFW_Rental_List')) {
                                             <a class="rbfw-act-btn edit" href="<?php echo esc_url($it['edit_link']); ?>" title="<?php esc_attr_e('Edit', 'booking-and-rental-manager-for-woocommerce'); ?>">
                                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                             </a>
+                                            <a class="rbfw-act-btn dup" href="<?php echo esc_url($it['duplicate_link']); ?>" title="<?php esc_attr_e('Duplicate', 'booking-and-rental-manager-for-woocommerce'); ?>">
+                                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                            </a>
                                             <a class="rbfw-act-btn del" href="<?php echo esc_url($it['trash_link']); ?>" title="<?php esc_attr_e('Move to Trash', 'booking-and-rental-manager-for-woocommerce'); ?>" onclick="return confirm('<?php echo esc_js(__('Move this item to Trash?', 'booking-and-rental-manager-for-woocommerce')); ?>');">
                                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                                             </a>
@@ -488,6 +490,9 @@ if (!class_exists('RBFW_Rental_List')) {
                                             <a class="rbfw-table-act edit" href="<?php echo esc_url($it['edit_link']); ?>" title="<?php esc_attr_e('Edit', 'booking-and-rental-manager-for-woocommerce'); ?>" aria-label="<?php esc_attr_e('Edit', 'booking-and-rental-manager-for-woocommerce'); ?>">
                                                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                             </a>
+                                            <a class="rbfw-table-act dup" href="<?php echo esc_url($it['duplicate_link']); ?>" title="<?php esc_attr_e('Duplicate', 'booking-and-rental-manager-for-woocommerce'); ?>" aria-label="<?php esc_attr_e('Duplicate', 'booking-and-rental-manager-for-woocommerce'); ?>">
+                                                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                            </a>
                                             <a class="rbfw-table-act del" href="<?php echo esc_url($it['trash_link']); ?>" title="<?php esc_attr_e('Move to Trash', 'booking-and-rental-manager-for-woocommerce'); ?>" aria-label="<?php esc_attr_e('Move to Trash', 'booking-and-rental-manager-for-woocommerce'); ?>" onclick="return confirm('<?php echo esc_js(__('Move this item to Trash?', 'booking-and-rental-manager-for-woocommerce')); ?>');">
                                                 <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                                             </a>
@@ -510,40 +515,6 @@ if (!class_exists('RBFW_Rental_List')) {
                 </div>
             </div>
             <?php
-        }
-
-        function rbfw_duplicate_post_function()
-        {
-            if (!isset($_GET['post_id']) || !isset($_GET['_wpnonce']) ||
-                !wp_verify_nonce($_GET['_wpnonce'], 'rbfw_duplicate_post_' . sanitize_text_field($_GET['post_id']))
-            ) {
-                wp_die('Invalid request (missing or invalid nonce).');
-            }
-
-            $post_id = (int)sanitize_text_field(wp_unslash($_GET['post_id']));
-            $post = get_post($post_id);
-
-            $new_post = array(
-                'post_title' => $post->post_title . ' (Copy)',
-                'post_content' => $post->post_content,
-                'post_status' => 'draft',
-                'post_type' => $post->post_type,
-                'post_author' => get_current_user_id(),
-            );
-
-            $new_post_id = wp_insert_post($new_post);
-
-            if (is_wp_error($new_post_id) || !$new_post_id) {
-                wp_die('Failed to duplicate post.');
-            }
-            $meta = get_post_meta($post_id);
-            foreach ($meta as $key => $values) {
-                foreach ($values as $value) {
-                    add_post_meta($new_post_id, $key, maybe_unserialize($value));
-                }
-            }
-            wp_redirect(admin_url('post.php?action=edit&post=' . $new_post_id));
-            exit;
         }
 
     }

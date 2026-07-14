@@ -35,10 +35,55 @@
     $rbfw_security_deposit_amount = get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) ? get_post_meta($rbfw_id, 'rbfw_security_deposit_amount', true) : 0;
 
 ?>
+	<?php
+	// Minimum price across all room types (daylong + daynight)
+	$_rbfw_resort_prices = [];
+	if ( ! empty( $rbfw_resort_room_data ) ) {
+		foreach ( $rbfw_resort_room_data as $_room ) {
+			if ( ! empty( $_room['rbfw_room_daylong_rate'] ) && (float) $_room['rbfw_room_daylong_rate'] > 0 ) {
+				$_rbfw_resort_prices[] = (float) $_room['rbfw_room_daylong_rate'];
+			}
+			if ( ! empty( $_room['rbfw_room_daynight_rate'] ) && (float) $_room['rbfw_room_daynight_rate'] > 0 ) {
+				$_rbfw_resort_prices[] = (float) $_room['rbfw_room_daynight_rate'];
+			}
+		}
+	}
+	$_rbfw_resort_min_price = ! empty( $_rbfw_resort_prices ) ? min( $_rbfw_resort_prices ) : 0;
+	?>
+
 	<!--    Main Layout-->
 	<div class="rbfw-single-container" data-service-id="<?php echo esc_attr($rbfw_id); ?>">
 
 		<div class="rbfw-single-right-container">
+			<div class="rbfw-sd-rate-box">
+				<?php rbfw_fd_summary_badges(); ?>
+				<?php rbfw_fd_summary_title(); ?>
+				<?php rbfw_fd_summary_desc(); ?>
+				<?php if ( $_rbfw_resort_min_price > 0 ) : ?>
+				<div class="rbfw-sd-rate-box-price-row">
+					<span class="rbfw-sd-rate-box-label"><?php esc_html_e( 'Starting from', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					<div class="rbfw-sd-rate-box-price">
+						<?php echo wp_kses( wc_price( $_rbfw_resort_min_price ), rbfw_allowed_html() ); ?>
+						<span class="rbfw-sd-rate-per">/ <?php esc_html_e( 'Night', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+				</div>
+				<?php endif; ?>
+				<div class="rbfw-sd-trust-grid">
+					<div class="rbfw-sd-trust-item">
+						<i class="far fa-check-circle"></i>
+						<span><?php esc_html_e( 'Instant confirmation', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+					<div class="rbfw-sd-trust-item">
+						<i class="fas fa-lock"></i>
+						<span><?php esc_html_e( 'Secure payment', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+					<div class="rbfw-sd-trust-item">
+						<i class="far fa-calendar-times"></i>
+						<span><?php esc_html_e( 'Free cancellation', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+				</div>
+			</div>
+
 			<form action="" method='post' class="mp_rbfw_ticket_form">
                 <?php do_action('rbfw_discount_ad', $rbfw_id); ?>
                 <div class="rbfw_resort_item_wrapper">
@@ -208,6 +253,7 @@
                 <input type="hidden" name="rbfw_post_id" id="rbfw_post_id"  value="<?php echo esc_attr($post_id); ?>">
                 <input type="hidden" name="rbfw_off_days" id="rbfw_off_days"  value='<?php echo esc_attr(rbfw_off_days($post_id)); ?>'>
                 <input type="hidden" name="rbfw_offday_range" id="rbfw_offday_range"  value='<?php echo esc_attr(rbfw_off_dates($post_id)); ?>'>
+                <input type="hidden" id="rbfw_block_offday_booking" value="<?php echo esc_attr(rbfw_block_offday_range_booking($post_id)); ?>">
                 <input type="hidden" id="rbfw_minimum_booking_day" value="<?php echo esc_attr($rbfw_minimum_booking_day); ?>">
                 <input type="hidden" id="rbfw_maximum_booking_day" value="<?php echo esc_attr($rbfw_maximum_booking_day); ?>">
 
@@ -218,26 +264,32 @@
 
 
                 <?php do_action('rbfw_ticket_feature_info'); ?>
-                <div class="item">
+                <div class="item rbfw-checkin-checkout-card">
                     <div class="rbfw-single-right-heading mb-08">
-                        <?php esc_html_e('Check-In & Check-Out Date','booking-and-rental-manager-for-woocommerce'); ?>
+                        <span><?php esc_html_e('Check-In & Check-Out Date','booking-and-rental-manager-for-woocommerce'); ?></span>
+                        <i class="fas fa-calendar-alt rbfw-srh-cal-icon"></i>
                     </div>
                     <div class="item-content rbfw-datetime">
                         <div class="left date">
                             <span class="calendar"><i class="fas fa-calendar-alt"></i></span>
                             <input type="hidden" name="rbfw_start_datetime" id="hidden_checkin_date">
                             <input class="rbfw-input rbfw-time-price" type="text" name="rbfw_start" id="checkin_date" placeholder="<?php esc_attr_e('Check-In Date','booking-and-rental-manager-for-woocommerce'); ?>" required readonly>
+                            <button type="button" class="rbfw-date-clear-btn" data-clears="checkin_date" aria-label="<?php esc_attr_e('Clear check-in date','booking-and-rental-manager-for-woocommerce'); ?>"><i class="fas fa-times"></i></button>
                         </div>
                         <div class="right date">
                             <span class="calendar"><i class="fas fa-calendar-alt"></i></span>
                             <input type="hidden" name="rbfw_end_datetime" id="hidden_checkout_date">
                             <input class="rbfw-input rbfw-time-price" type="text" name="rbfw_end" id="checkout_date" placeholder="<?php esc_attr_e('Check-Out Date','booking-and-rental-manager-for-woocommerce'); ?>" required readonly>
+                            <button type="button" class="rbfw-date-clear-btn" data-clears="checkout_date" aria-label="<?php esc_attr_e('Clear check-out date','booking-and-rental-manager-for-woocommerce'); ?>"><i class="fas fa-times"></i></button>
                         </div>
                     </div>
                 </div>
 
+                <?php include RBFW_TEMPLATE_PATH . 'forms/location-cards.php'; ?>
+
                 <div class="item">
-                    <a class="rbfw_chk_availability_btn">
+                    <a class="rbfw_chk_availability_btn rbfw-avail-btn-disabled"
+                       title="<?php esc_attr_e('Please select check-in and check-out dates','booking-and-rental-manager-for-woocommerce'); ?>">
                         <?php esc_html_e('Check Availability','booking-and-rental-manager-for-woocommerce'); ?>
                     </a>
                 </div>
@@ -264,6 +316,67 @@
 			</form>
 		</div>
     </div>
+
+<script>
+jQuery(function($){
+
+    /* ---- Check Availability button: enable only when both dates picked ---- */
+    var $availBtn     = $('.rbfw_chk_availability_btn');
+    var disabledTitle = $availBtn.attr('title');
+
+    function rbfwUpdateAvailBtn() {
+        var hasCheckin  = $('#hidden_checkin_date').val();
+        var hasCheckout = $('#hidden_checkout_date').val();
+        if (hasCheckin && hasCheckout) {
+            $availBtn.removeClass('rbfw-avail-btn-disabled').removeAttr('title');
+        } else {
+            $availBtn.addClass('rbfw-avail-btn-disabled').attr('title', disabledTitle);
+        }
+    }
+
+    /* ---- Clear buttons: show/hide X when date field has a value ---- */
+    function rbfwSyncDateClear() {
+        $('[data-clears="checkin_date"]').toggleClass('rbfw-date-clear-visible',  !!$('#hidden_checkin_date').val());
+        $('[data-clears="checkout_date"]').toggleClass('rbfw-date-clear-visible', !!$('#hidden_checkout_date').val());
+    }
+
+    /* resort_script.js triggers change on hidden inputs inside datepicker onSelect */
+    $(document).on('change', '#hidden_checkin_date, #hidden_checkout_date', function() {
+        rbfwUpdateAvailBtn();
+        rbfwSyncDateClear();
+    });
+
+    /* Clear button click: wipe visible + hidden inputs, re-evaluate state */
+    var rbfwHiddenMap = { 'checkin_date': 'hidden_checkin_date', 'checkout_date': 'hidden_checkout_date' };
+    $(document).on('click', '.rbfw-date-clear-btn', function(e) {
+        e.preventDefault();
+        var visibleId = $(this).data('clears');
+        var hiddenId  = rbfwHiddenMap[visibleId];
+        $('#' + visibleId).val('');
+        if (hiddenId) { $('#' + hiddenId).val('').trigger('change'); }
+    });
+
+    /* ---- Book Now button: enable only when at least one qty > 0 ---- */
+    function rbfwUpdateBookNowBtn() {
+        var hasQty = false;
+        $('.rbfw_room_qty, .rbfw_service_qty_resort').each(function() {
+            if (parseInt($(this).val()) > 0) {
+                hasQty = true;
+                return false; /* break each */
+            }
+        });
+        var $bookBtn = $('button.rbfw_resort_book_now_btn');
+        if (hasQty) {
+            $bookBtn.prop('disabled', false).removeClass('rbfw_disabled_button');
+        } else {
+            $bookBtn.prop('disabled', true).addClass('rbfw_disabled_button');
+        }
+    }
+
+    /* Delegated — tables are AJAX-loaded after page ready */
+    $(document).on('input', '.rbfw_room_qty, .rbfw_service_qty_resort', rbfwUpdateBookNowBtn);
+});
+</script>
 
 
 

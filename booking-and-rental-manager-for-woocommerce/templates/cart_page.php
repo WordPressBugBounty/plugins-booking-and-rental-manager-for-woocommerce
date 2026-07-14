@@ -25,10 +25,10 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
     $start_datetime    = $cart_item['rbfw_start_datetime'] ? $cart_item['rbfw_start_datetime'] : '';
     $end_datetime 		= $cart_item['rbfw_end_datetime'] ? $cart_item['rbfw_end_datetime'] : '';
 
-    $origin              = date_create( $start_datetime );
-    $target              = date_create( $end_datetime );
-    $interval            = date_diff( $origin, $target );
-    $total_days          = $interval->format( '%a' );
+    $origin     = $start_datetime ? date_create( $start_datetime ) : false;
+    $target     = $end_datetime ? date_create( $end_datetime ) : false;
+    $interval   = ( $origin && $target ) ? date_diff( $origin, $target ) : false;
+    $total_days = $interval ? $interval->format( '%a' ) : 0;
     $rbfw_count_extra_day_enable = $rbfw->get_option_trans('rbfw_count_extra_day_enable', 'rbfw_basic_gen_settings', 'on');
     if ($rbfw_count_extra_day_enable == 'on') {
         $total_days++;
@@ -295,6 +295,9 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
     $rbfw_pickup_point  = isset($cart_item['rbfw_pickup_point']) ? $cart_item['rbfw_pickup_point'] : '';
     $rbfw_dropoff_point = isset($cart_item['rbfw_dropoff_point']) ? $cart_item['rbfw_dropoff_point'] : '';
 
+    // Item Variations (Single Day): the customer's size selection, if any.
+    $variation_info = isset($cart_item['rbfw_variation_info']) ? $cart_item['rbfw_variation_info'] : [];
+
     $rbfw_item_quantity = 1;
 
     if(!empty($rbfw_bikecarsd_data)):
@@ -356,7 +359,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         <?php if ( ! empty( $start_datetime )): ?>
             <tr>
                 <th>
-                    <?php if(($start_time)){ ?>
+                    <?php if( rbfw_booking_has_time($start_time) ){ ?>
 
                         <?php
                         if($rbfw->get_option_trans('rbfw_text_start_date_and_time', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
@@ -380,7 +383,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
                 </th>
                 <td>
                     <?php echo esc_html(rbfw_get_datetime($start_datetime,'date-text')) ; ?>
-                    <?php if(($start_time)){
+                    <?php if( rbfw_booking_has_time($start_time) ){
                         echo ' @'.esc_html(gmdate(get_option('time_format'), strtotime($start_time)));
                     } ?>
                 </td>
@@ -390,7 +393,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         <?php if ( ! empty( $end_datetime )): ?>
             <tr>
                 <th>
-                    <?php if(($end_time)){ ?>
+                    <?php if( rbfw_booking_has_time($start_time) && rbfw_booking_has_time($end_time) ){ ?>
 
                         <?php
                         if($rbfw->get_option_trans('rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
@@ -414,12 +417,31 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
                 </th>
                 <td>
                     <?php echo esc_html(rbfw_get_datetime($end_datetime,'date-text')) ; ?>
-                    <?php if(($end_time)){
+                    <?php if( rbfw_booking_has_time($start_time) && rbfw_booking_has_time($end_time) ){
                         echo ' @'.esc_html(gmdate(get_option('time_format'), strtotime($end_time)));
                     } ?>
                 </td>
             </tr>
         <?php endif; ?>
+
+        <?php if ( ! empty( $variation_info ) ){ ?>
+            <?php foreach ( $variation_info as $key => $value ) {
+                $vi_qty   = isset( $value['qty'] ) ? (int) $value['qty'] : 0;
+                $vi_price = isset( $value['price'] ) ? (float) $value['price'] : 0;
+                $vi_text  = esc_html( $value['field_value'] ?? '' );
+                if ( $vi_qty > 0 ) {
+                    $vi_text .= ' &times; ' . esc_html( $vi_qty );
+                }
+                if ( $vi_price > 0 ) {
+                    $vi_text .= ' <span class="rbfw_variation_surcharge">(+' . wp_kses_post( wc_price( $vi_price ) ) . ')</span>';
+                }
+                ?>
+                <tr>
+                    <th><?php echo esc_html( $value['field_label'] ?? '' ); ?></th>
+                    <td><?php echo wp_kses_post( $vi_text ); ?></td>
+                </tr>
+            <?php } ?>
+        <?php } ?>
 
         <?php
 
@@ -540,29 +562,29 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
 <?php if($rbfw_rent_type == 'bike_car_md' || $rbfw_rent_type == 'dress' || $rbfw_rent_type == 'equipment' || $rbfw_rent_type == 'others'){
 
 
-    $start_datetime     = $cart_item['rbfw_start_datetime'] ? $cart_item['rbfw_start_datetime'] : '';
-    $end_datetime       = $cart_item['rbfw_end_datetime'] ? $cart_item['rbfw_end_datetime'] : '';
-    $start_date         = $cart_item['rbfw_start_date'] ? $cart_item['rbfw_start_date'] : '';
-    $start_time         = $cart_item['rbfw_start_time'] ? $cart_item['rbfw_start_time'] : '';
-    $end_date           = $cart_item['rbfw_end_date'] ? $cart_item['rbfw_end_date'] : '';
-    $end_time           = $cart_item['rbfw_end_time'] ? $cart_item['rbfw_end_time'] : '';
-    $rbfw_pickup_point  = $cart_item['rbfw_pickup_point'] ? $cart_item['rbfw_pickup_point'] : '';
-    $rbfw_dropoff_point = $cart_item['rbfw_dropoff_point'] ? $cart_item['rbfw_dropoff_point'] : '';
-    $rbfw_duration_md = $cart_item['rbfw_duration_md'] ? $cart_item['rbfw_duration_md'] : '';
+    $start_datetime     = $cart_item['rbfw_start_datetime'] ?? '';
+    $end_datetime       = $cart_item['rbfw_end_datetime'] ?? '';
+    $start_date         = $cart_item['rbfw_start_date'] ?? '';
+    $start_time         = $cart_item['rbfw_start_time'] ?? '';
+    $end_date           = $cart_item['rbfw_end_date'] ?? '';
+    $end_time           = $cart_item['rbfw_end_time'] ?? '';
+    $rbfw_pickup_point  = $cart_item['rbfw_pickup_point'] ?? '';
+    $rbfw_dropoff_point = $cart_item['rbfw_dropoff_point'] ?? '';
+    $rbfw_duration_md   = $cart_item['rbfw_duration_md'] ?? '';
 
-    $rbfw_duration_price_individual = isset($cart_item['rbfw_duration_price_individual'] )? $cart_item['rbfw_duration_price_individual'] : 0;
+    $rbfw_duration_price_individual = $cart_item['rbfw_duration_price_individual'] ?? 0;
 
-    $rbfw_duration_price = $cart_item['rbfw_duration_price'] ? $cart_item['rbfw_duration_price'] : 0;
+    $rbfw_duration_price = $cart_item['rbfw_duration_price'] ?? 0;
 
 
-    $rbfw_item_quantity = $cart_item['rbfw_item_quantity'] ? $cart_item['rbfw_item_quantity'] : 1;
-    $rbfw_service_price = $cart_item['rbfw_service_price'] ? $cart_item['rbfw_service_price'] : '';
-    $rbfw_service_info 	= $cart_item['rbfw_service_info'] ? $cart_item['rbfw_service_info'] : [];
-    $rbfw_service_infos 	= $cart_item['rbfw_service_infos'] ? $cart_item['rbfw_service_infos'] : [];
+    $rbfw_item_quantity = $cart_item['rbfw_item_quantity'] ?? 1;
+    $rbfw_service_price = $cart_item['rbfw_service_price'] ?? '';
+    $rbfw_service_info 	= $cart_item['rbfw_service_info'] ?? [];
+    $rbfw_service_infos 	= $cart_item['rbfw_service_infos'] ?? [];
 
-    $rbfw_ticket_info = $cart_item['rbfw_ticket_info'] ? $cart_item['rbfw_ticket_info'] : [];
-    $variation_info = $cart_item['rbfw_variation_info'] ? $cart_item['rbfw_variation_info'] : [];
-    $total_days = $cart_item['total_days'];
+    $rbfw_ticket_info = $cart_item['rbfw_ticket_info'] ?? [];
+    $variation_info = $cart_item['rbfw_variation_info'] ?? [];
+    $total_days = $cart_item['total_days'] ?? '';
 
 
     $rbfw_extra_service_data = get_post_meta( $rbfw_id, 'rbfw_extra_service_data', true ) ? get_post_meta( $rbfw_id, 'rbfw_extra_service_data', true ) : array();
@@ -574,8 +596,8 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         $extra_services = array();
     endif;
 
-    $discount_type 	= $cart_item['discount_type'] ? $cart_item['discount_type'] : '';
-    $discount_amount 	= $cart_item['discount_amount'] ? $cart_item['discount_amount'] : '';
+    $discount_type 	= $cart_item['discount_type'] ?? '';
+    $discount_amount 	= $cart_item['discount_amount'] ?? '';
 
     $rbfw_enable_extra_service_qty = get_post_meta( $rbfw_id, 'rbfw_enable_extra_service_qty', true ) ? get_post_meta( $rbfw_id, 'rbfw_enable_extra_service_qty', true ) : 'no';
 
@@ -613,7 +635,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
             </tr>
         <?php } ?>
 
-        <?php if ( !empty($start_datetime) && !empty($start_time)){ ?>
+        <?php if ( !empty($start_datetime) && rbfw_booking_has_time($start_time)){ ?>
             <tr>
                 <th>
                     <?php
@@ -643,7 +665,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
 
 
 
-        <?php if (!empty($end_datetime) && !empty($end_time)){ ?>
+        <?php if (!empty($end_datetime) && rbfw_booking_has_time($start_time) && rbfw_booking_has_time($end_time)){ ?>
             <tr>
                 <th>
                     <?php
@@ -672,10 +694,20 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         <?php } ?>
 
         <?php if(!empty($variation_info)){ ?>
-            <?php foreach ($variation_info as $key => $value) { ?>
+            <?php foreach ($variation_info as $key => $value) {
+                $vi_qty   = isset( $value['qty'] ) ? (int) $value['qty'] : 0;
+                $vi_price = isset( $value['price'] ) ? (float) $value['price'] : 0;
+                $vi_text  = esc_html( $value['field_value'] ?? '' );
+                if ( $vi_qty > 0 ) {
+                    $vi_text .= ' &times; ' . esc_html( $vi_qty );
+                }
+                if ( $vi_price > 0 ) {
+                    $vi_text .= ' <span class="rbfw_variation_surcharge">(+' . wp_kses_post( wc_price( $vi_price ) ) . ')</span>';
+                }
+                ?>
                 <tr>
-                    <th><?php echo esc_html($value['field_label']);  ?></th>
-                    <td><?php echo esc_html($value['field_value']); ?></td>
+                    <th><?php echo esc_html($value['field_label'] ?? '');  ?></th>
+                    <td><?php echo wp_kses_post( $vi_text ); ?></td>
                 </tr>
             <?php } ?>
         <?php }  ?>
@@ -907,7 +939,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         <?php if ( ! empty( $start_datetime )): ?>
             <tr>
                 <th>
-                    <?php if(($start_time)){ ?>
+                    <?php if( rbfw_booking_has_time($start_time) ){ ?>
 
                         <?php
                         if($rbfw->get_option_trans('rbfw_text_start_date_and_time', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
@@ -933,7 +965,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
                 </th>
                 <td>
                     <?php echo esc_html(rbfw_date_format($start_datetime)) ; ?>
-                    <?php if(($start_time)){
+                    <?php if( rbfw_booking_has_time($start_time) ){
                         echo ' @'.esc_html(gmdate(get_option('time_format'), strtotime($start_time)));
                     } ?>
                 </td>
@@ -943,7 +975,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
         <?php if ( ! empty( $end_datetime )): ?>
             <tr>
                 <th>
-                    <?php if(($end_time)){ ?>
+                    <?php if( rbfw_booking_has_time($start_time) && rbfw_booking_has_time($end_time) ){ ?>
 
                         <?php
                         if($rbfw->get_option_trans('rbfw_text_end_date_and_time', 'rbfw_basic_translation_settings') && want_loco_translate()=='no'){
@@ -969,7 +1001,7 @@ $rbfw_management_info 	= $cart_item['rbfw_management_info'] ? $cart_item['rbfw_m
                 </th>
                 <td>
                     <?php echo esc_html(rbfw_date_format($end_datetime)) ; ?>
-                    <?php if(($end_time)){
+                    <?php if( rbfw_booking_has_time($start_time) && rbfw_booking_has_time($end_time) ){
                         echo ' @'.esc_html(gmdate(get_option('time_format'), strtotime($end_time)));
                     } ?>
                 </td>

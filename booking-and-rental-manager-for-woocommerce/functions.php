@@ -12,6 +12,123 @@ function rbfw_woo_install_check() {
 }
 
 /**
+ * Global wrappers around the capability helpers on RBFW_Function.
+ *
+ * These exist for templates and any code that may run before RBFW_Function is
+ * loaded (e.g. WP-CLI), mirroring the WP-CLI fallback pattern used elsewhere.
+ * They are the single source of truth for runtime WooCommerce branching.
+ */
+if ( ! function_exists( 'rbfw_has_woocommerce' ) ) {
+    function rbfw_has_woocommerce() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::has_woocommerce();
+        }
+        return class_exists( 'WooCommerce' );
+    }
+}
+
+if ( ! function_exists( 'rbfw_wc_payment_enabled' ) ) {
+    function rbfw_wc_payment_enabled() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::wc_payment_enabled();
+        }
+        $options = get_option( 'rbfw_payment_settings' );
+        $enabled = isset( $options['rbfw_enable_wc_payment'] ) ? $options['rbfw_enable_wc_payment'] : 'on';
+        return $enabled !== 'off';
+    }
+}
+
+if ( ! function_exists( 'rbfw_booking_mode' ) ) {
+    function rbfw_booking_mode() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::booking_mode();
+        }
+        if ( ! rbfw_has_woocommerce() || ! rbfw_wc_payment_enabled() ) {
+            return 'standalone';
+        }
+        $options = get_option( 'rbfw_basic_payment_settings' );
+        $mode    = isset( $options['rbfw_booking_mode'] ) ? $options['rbfw_booking_mode'] : 'woocommerce';
+        return ( $mode === 'standalone' ) ? 'standalone' : 'woocommerce';
+    }
+}
+
+if ( ! function_exists( 'rbfw_use_wc' ) ) {
+    function rbfw_use_wc() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::use_wc();
+        }
+        return rbfw_has_woocommerce() && rbfw_booking_mode() === 'woocommerce';
+    }
+}
+
+if ( ! function_exists( 'rbfw_login_required' ) ) {
+    function rbfw_login_required() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::login_required();
+        }
+        if ( rbfw_use_wc() ) {
+            return false;
+        }
+        $options = get_option( 'rbfw_payment_settings' );
+        $val     = isset( $options['rbfw_require_login'] ) ? $options['rbfw_require_login'] : 'on';
+        return $val !== 'off';
+    }
+}
+
+if ( ! function_exists( 'rbfw_is_booking_available' ) ) {
+    function rbfw_is_booking_available() {
+        if ( class_exists( 'RBFW_Function' ) ) {
+            return RBFW_Function::is_booking_available();
+        }
+        if ( rbfw_use_wc() ) {
+            return true;
+        }
+        // Standalone: need at least one enabled Pro custom payment method.
+        if ( ! ( function_exists( 'rbfw_check_pro_active' ) && rbfw_check_pro_active() ) ) {
+            return false;
+        }
+        return ! empty( apply_filters( 'rbfw_pro_enabled_payment_methods', array() ) );
+    }
+}
+
+/**
+ * Helpful, dismissible admin notice shown when WooCommerce is inactive, explaining that the
+ * plugin has switched to Standalone booking mode. Replaces the old forced "install WooCommerce"
+ * error now that WooCommerce is optional.
+ */
+add_action( 'admin_init', 'rbfw_handle_standalone_notice_dismiss' );
+function rbfw_handle_standalone_notice_dismiss() {
+    if ( isset( $_GET['rbfw_dismiss_standalone'] ) && $_GET['rbfw_dismiss_standalone'] === '1' ) {
+        if ( isset( $_GET['_wpnonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'rbfw_dismiss_standalone' ) && current_user_can( 'manage_options' ) ) {
+            update_option( 'rbfw_standalone_dismissed', 'yes' );
+        }
+    }
+}
+
+add_action( 'admin_notices', 'rbfw_standalone_mode_notice' );
+function rbfw_standalone_mode_notice() {
+    if ( rbfw_has_woocommerce() ) {
+        return;
+    }
+    if ( get_option( 'rbfw_standalone_dismissed' ) === 'yes' ) {
+        return;
+    }
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+    $dismiss_url = wp_nonce_url( add_query_arg( 'rbfw_dismiss_standalone', '1' ), 'rbfw_dismiss_standalone' );
+    ?>
+    <div class="notice notice-info is-dismissible">
+        <p>
+            <strong><?php esc_html_e( 'Booking & Rental Manager is running in Standalone mode.', 'booking-and-rental-manager-for-woocommerce' ); ?></strong>
+            <?php esc_html_e( 'WooCommerce is not active, so bookings are handled internally. Activate WooCommerce any time to use its cart, checkout and order flow.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+            <a href="<?php echo esc_url( $dismiss_url ); ?>"><?php esc_html_e( 'Continue without WooCommerce', 'booking-and-rental-manager-for-woocommerce' ); ?></a>
+        </p>
+    </div>
+    <?php
+}
+
+/**
  * Detect dangerous serialized payloads (objects/custom classes).
  *
  * @param string $value Serialized string.
@@ -90,6 +207,89 @@ function rbfw_prepare_feature_category_meta_value( $value ) {
     }
 
     return rbfw_sanitize_feature_category_array( $value );
+}
+
+/**
+ * Flatten posted rent-type values into a list of names.
+ *
+ * @param mixed $raw Posted rbfw_categories value (array or string).
+ * @return string[]
+ */
+function rbfw_normalize_rent_type_input( $raw ) {
+    $names = array();
+
+    if ( is_string( $raw ) ) {
+        $raw = array( $raw );
+    }
+
+    if ( ! is_array( $raw ) ) {
+        return array();
+    }
+
+    foreach ( $raw as $item ) {
+        if ( is_array( $item ) ) {
+            $names = array_merge( $names, rbfw_normalize_rent_type_input( $item ) );
+            continue;
+        }
+
+        $item = sanitize_text_field( (string) $item );
+        if ( '' === $item ) {
+            continue;
+        }
+
+        foreach ( explode( ',', $item ) as $part ) {
+            $part = trim( $part );
+            if ( '' !== $part ) {
+                $names[] = $part;
+            }
+        }
+    }
+
+    return $names;
+}
+
+/**
+ * Map of lowercase rent-type name => canonical taxonomy term name.
+ *
+ * @return array<string, string>
+ */
+function rbfw_get_valid_rent_type_names() {
+    $terms = get_terms(
+        array(
+            'taxonomy'   => 'rbfw_item_caregory',
+            'hide_empty' => false,
+        )
+    );
+
+    $valid = array();
+    if ( ! is_wp_error( $terms ) ) {
+        foreach ( $terms as $term ) {
+            $valid[ strtolower( $term->name ) ] = $term->name;
+        }
+    }
+
+    return $valid;
+}
+
+/**
+ * Keep only rent types that exist in rbfw_item_caregory.
+ *
+ * @param mixed $raw Posted rbfw_categories value.
+ * @return string[]
+ */
+function rbfw_sanitize_rent_type_categories( $raw ) {
+    $names = rbfw_normalize_rent_type_input( $raw );
+    $valid = rbfw_get_valid_rent_type_names();
+    $out   = array();
+
+    foreach ( $names as $name ) {
+        $key = strtolower( $name );
+        if ( isset( $valid[ $key ] ) ) {
+            $out[] = $valid[ $key ];
+        }
+    }
+
+    return array_values( array_unique( $out ) );
 }
 
 /**
@@ -190,8 +390,14 @@ function rbfw_page_create() {
         'search-item-list' => [
             'title' => 'Search Item List',
             'content' => '[rbfw_search_ac] [search-result]'
+        ],
+        'booking-search' => [
+            'title' => 'Booking Search',
+            'content' => '[rbfw_booking_search]'
         ]
     ];
+
+    $created = false;
 
     foreach ($pages as $slug => $page) {
         if (get_page_by_path($slug) === null) {
@@ -205,6 +411,8 @@ function rbfw_page_create() {
             ]);
 
             if (!is_wp_error($page_id)) {
+                wp_cache_delete( $slug, 'posts' );
+                $created = true;
                 error_log("Page '{$page['title']}' created successfully with ID: $page_id");
             } else {
                 error_log("Failed to create page '{$page['title']}': " . $page_id->get_error_message());
@@ -212,7 +420,11 @@ function rbfw_page_create() {
         }
     }
 
-    wp_cache_flush(); // Clear cache to avoid stale queries
+    // Newly created pages need a rewrite flush or their permalinks 404 until
+    // an admin manually re-saves Settings -> Permalinks.
+    if ( $created ) {
+        flush_rewrite_rules();
+    }
 }
 
 
@@ -307,6 +519,62 @@ function rbfw_add_term_condition_item( $post_id ) {
             }
         }
     }
+}
+
+/**
+ * One-time, self-healing migration: clear the bogus "1000" stock default.
+ *
+ * Older builds of the modern editor silently saved a blank Stock Quantity as
+ * 1000, which made single-unit rentals effectively unlimited and allowed
+ * double-booking. This converts any rental item still holding exactly 1000 back
+ * to blank, so the server-side availability guard treats it as a single unit
+ * (see rbfw_get_effective_item_stock()). Items the admin deliberately set to a
+ * real number are untouched, and the migration runs only once per site (guarded
+ * by an option flag) — so a value an admin later sets is never overwritten.
+ *
+ * Runs on admin_init so it self-applies on the next admin page load after
+ * activation or an update, without a manual step.
+ */
+add_action( 'admin_init', 'rbfw_maybe_migrate_stock_1000_default' );
+function rbfw_maybe_migrate_stock_1000_default() {
+
+	if ( 'done' === get_option( 'rbfw_stock_1000_migrated' ) ) {
+		return;
+	}
+
+	// Allow a site to opt out of the data migration entirely.
+	if ( apply_filters( 'rbfw_skip_stock_1000_migration', false ) ) {
+		update_option( 'rbfw_stock_1000_migrated', 'done' );
+		return;
+	}
+
+	// What blank/1000 stock should become. Default '' (blank => treated as 1 unit).
+	$target_value = apply_filters( 'rbfw_stock_1000_migration_target', '' );
+
+	$item_ids = get_posts(
+		array(
+			'post_type'      => 'rbfw_item',
+			'post_status'    => 'any',
+			'numberposts'    => -1,
+			'fields'         => 'ids',
+			'no_found_rows'  => true,
+			'meta_query'     => array(
+				array(
+					'key'     => 'rbfw_item_stock_quantity',
+					'value'   => '1000',
+					'compare' => '=',
+				),
+			),
+		)
+	);
+
+	if ( ! empty( $item_ids ) ) {
+		foreach ( $item_ids as $item_id ) {
+			update_post_meta( $item_id, 'rbfw_item_stock_quantity', $target_value );
+		}
+	}
+
+	update_option( 'rbfw_stock_1000_migrated', 'done' );
 }
 
 

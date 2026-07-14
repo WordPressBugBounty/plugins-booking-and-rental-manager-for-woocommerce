@@ -58,7 +58,7 @@
 									?>
                                     <div class="abTopLeft">
                                         <button type="button" class="_dButton_bgWhite_textDefault" data-target-popup="superSlider" data-slide-index="1">
-											<?php echo esc_html__( 'View All', 'service-booking-manager' ) . ' ' . esc_html( sizeof( $image_ids ) ) . ' ' . esc_html__( 'Images', 'service-booking-manager' ); ?>
+											<?php echo esc_html__( 'View All', 'booking-and-rental-manager-for-woocommerce' ) . ' ' . esc_html( sizeof( $image_ids ) ) . ' ' . esc_html__( 'Images', 'booking-and-rental-manager-for-woocommerce' ); ?>
                                         </button>
                                     </div>
 									<?php
@@ -84,6 +84,16 @@
 					?>
                     <div class="superSlider">
                         <div data-bg-image="<?php echo esc_html( $thumbnail ); ?>"></div>
+                    </div>
+					<?php
+				} else {
+					?>
+                    <div class="superSlider">
+                        <div class="sliderAllItem">
+                            <div class="rbfw_no_img_placeholder">
+                                <span class="rbfw_no_img_placeholder_icon"><i class="fas fa-image"></i></span>
+                            </div>
+                        </div>
                     </div>
 					<?php
 				}
