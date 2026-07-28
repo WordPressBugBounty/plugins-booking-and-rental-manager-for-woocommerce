@@ -10,11 +10,13 @@ require_once RBFW_PLUGIN_DIR . '/lib/classes/class-admin-menu.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-form-fields-generator.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-form-fields-wrapper.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-meta-box.php';
+require_once RBFW_PLUGIN_DIR . '/includes/docs/class-docs-page.php';
 require_once RBFW_PLUGIN_DIR . '/admin/admin.php';
 require_once RBFW_PLUGIN_DIR . '/admin/RBFW_Modern_Editor.php';
 require_once RBFW_PLUGIN_DIR . '/admin/RBFW_WC_Payment_Manager.php';
 require_once RBFW_PLUGIN_DIR . '/admin/settings/RBFW_Payment_Settings.php';
 require_once RBFW_PLUGIN_DIR . '/admin/RBFW_Admin_Payment_Notice.php';
+require_once RBFW_PLUGIN_DIR . '/admin/RBFW_Pro_Features_Notice.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-icon-library.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_functions.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_frontend_display.php';
@@ -67,6 +69,7 @@ require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Booking_Manager.php';
 require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Booking_Post_Type.php';
 require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Booking_Actions.php';
 require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Booking_Normalizer.php';
+require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Reservation_Sync.php';
 require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Booking_List_Table.php';
 
 

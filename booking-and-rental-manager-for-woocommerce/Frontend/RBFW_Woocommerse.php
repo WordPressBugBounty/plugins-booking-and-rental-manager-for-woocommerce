@@ -10,11 +10,17 @@ if (!class_exists('RBFW_Woocommerce')) {
         {
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_block_add_to_cart_when_standalone'), 5, 2 );
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_prevent_duplicate_cart_item'), 10, 2 );
+            add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_validate_buffer_lead_time'), 15, 3 );
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_validate_availability_add_to_cart'), 20, 3 );
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_validate_location_stock'), 25, 3 );
+            add_filter( 'woocommerce_is_sold_individually', array($this , 'rbfw_rental_product_sold_individually'), 10, 2 );
             add_filter( 'woocommerce_add_cart_item_data',array($this ,  'rbfw_add_info_to_cart_item'), 90, 3 );
             add_action( 'woocommerce_before_calculate_totals', array($this ,  'rbfw_set_new_cart_price'), 90 );
             add_filter( 'woocommerce_get_item_data', array($this ,  'rbfw_show_cart_items') , 90, 2 );
+            // Retrofit the stored "Variation Information" order-item meta at display time so
+            // each value shows its qty + price, even for orders placed before that was added
+            // to the stored HTML. Rebuilt from the raw _rbfw_ticket_info kept on the item.
+            add_filter( 'woocommerce_order_item_display_meta_value', array( $this, 'rbfw_variation_meta_with_qty' ), 20, 3 );
             /*after place order*/
             add_action( 'woocommerce_after_checkout_validation', array($this ,  'rbfw_validation_before_checkout') );
             add_action( 'woocommerce_after_checkout_validation', array($this ,  'rbfw_validate_availability_before_checkout'), 20 );
@@ -74,13 +80,35 @@ if (!class_exists('RBFW_Woocommerce')) {
             return false;
         }
 
+        /**
+         * Keep WooCommerce's sold-individually state aligned with the rental setting.
+         *
+         * Rental items are represented in the cart by hidden WooCommerce products.
+         * Those products historically stored `_sold_individually = yes`, which made
+         * WooCommerce reject a second booking even when duplicates were enabled.
+         * Apply the setting at runtime so existing hidden products are fixed
+         * immediately, while leaving ordinary WooCommerce products untouched.
+         *
+         * @param bool       $sold_individually Current WooCommerce product value.
+         * @param WC_Product $product           Product being evaluated.
+         * @return bool
+         */
+        public function rbfw_rental_product_sold_individually( $sold_individually, $product ) {
+            if ( ! is_a( $product, 'WC_Product' ) ) {
+                return $sold_individually;
+            }
+
+            $rbfw_id = absint( get_post_meta( $product->get_id(), 'link_rbfw_id', true ) );
+
+            if ( ! $rbfw_id || 'rbfw_item' !== get_post_type( $rbfw_id ) ) {
+                return $sold_individually;
+            }
+
+            return ! rbfw_allow_duplicate_rental_cart_items();
+        }
+
         public function rbfw_prevent_duplicate_cart_item( $passed, $product_id  ) {
-
-
-            $rbfw_allow_duplicate_rental_cart_item = rbfw_get_option( 'rbfw_allow_duplicate_rental_cart_item', 'rbfw_basic_gen_settings' );
-
-            // If share section is disabled, don't display it
-            if ( $rbfw_allow_duplicate_rental_cart_item !== 'yes' ) {
+            if ( ! rbfw_allow_duplicate_rental_cart_items() ) {
                 foreach ( WC()->cart->get_cart() as $cart_item_key => $values ) {
                     $_product = $values['data'];
 
@@ -160,6 +188,111 @@ if (!class_exists('RBFW_Woocommerce')) {
          * @param int  $quantity   Quantity (unused; rental qty travels in the booking POST).
          * @return bool
          */
+        /**
+         * Buffer Time Before (lead time) gate at add-to-cart.
+         *
+         * The buffer was previously enforced only in the browser (the datepicker /
+         * time dropdown read #rbfw_buffer_time), so a request that skipped the JS
+         * could book inside the lead-time window. This re-checks it server-side
+         * against WordPress' own clock — nothing posted by the client is trusted.
+         *
+         * Deliberately fails open. It only rejects when the pickup datetime is
+         * unambiguous, i.e. the booking carries a real pickup time. Date-only
+         * bookings are skipped: their pickup would parse as midnight, and an
+         * hours-based buffer compared against midnight would wrongly reject a
+         * same-day booking that the day-level datepicker gate allows. Blocking a
+         * paying customer by mistake is worse than the bypass this closes.
+         *
+         * @param bool $passed
+         * @param int  $product_id
+         * @param int  $quantity
+         * @return bool
+         */
+        public function rbfw_validate_buffer_lead_time( $passed, $product_id, $quantity = 1 ) {
+            if ( ! $passed ) {
+                return $passed; // already rejected by another validator
+            }
+            global $rbfw;
+
+            $linked_rbfw_id = get_post_meta( $product_id, 'link_rbfw_id', true ) ? get_post_meta( $product_id, 'link_rbfw_id', true ) : $product_id;
+            $rbfw_id        = rbfw_check_product_exists( $linked_rbfw_id ) ? $linked_rbfw_id : $product_id;
+
+            if ( get_post_type( $rbfw_id ) !== $rbfw->get_cpt_name() ) {
+                return $passed;
+            }
+
+            $buffer_hours = absint( get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) );
+            if ( $buffer_hours < 1 ) {
+                return $passed; // no lead time configured -> nothing to enforce
+            }
+
+            // Parse the submitted booking exactly the way the cart build does.
+            $values = $this->rbfw_add_cart_item_func( array(), $rbfw_id );
+            if ( ! is_array( $values ) ) {
+                return $passed; // nonce missing / not a booking submit -> fail open
+            }
+
+            // Resolve the pickup datetime like rbfw_check_rental_availability():
+            // prefer the normalised key, fall back to date + time.
+            $start_raw  = ! empty( $values['rbfw_start_datetime'] ) ? $values['rbfw_start_datetime'] : '';
+            if ( '' === $start_raw ) {
+                $start_raw = isset( $values['rbfw_start_date'] ) ? $values['rbfw_start_date'] : '';
+            }
+            $start_time = isset( $values['rbfw_start_time'] ) ? trim( (string) $values['rbfw_start_time'] ) : '';
+
+            if ( '' === trim( (string) $start_raw ) ) {
+                return $passed; // nothing to compare -> fail open
+            }
+
+            // rbfw_start_datetime is a plain date for some rent types, with the time
+            // carried separately — join them before parsing.
+            $has_time = (bool) preg_match( '/\d{1,2}:\d{2}/', $start_raw );
+            if ( ! $has_time && '' !== $start_time ) {
+                $start_raw .= ' ' . $start_time;
+                $has_time   = (bool) preg_match( '/\d{1,2}:\d{2}/', $start_raw );
+            }
+
+            if ( ! $has_time ) {
+                return $passed; // date-only booking -> see docblock, fail open
+            }
+
+            try {
+                $timezone = wp_timezone();
+                $pickup   = new DateTime( $start_raw, $timezone );
+                $earliest = new DateTime( 'now', $timezone );
+                $earliest->modify( '+' . $buffer_hours . ' hours' );
+            } catch ( Exception $e ) {
+                return $passed; // unparseable -> fail open
+            }
+
+            if ( $pickup >= $earliest ) {
+                return $passed;
+            }
+
+            wc_add_notice(
+                sprintf(
+                    /* translators: 1: item name, 2: buffer hours, 3: earliest pickup date and time */
+                    _n(
+                        '%1$s needs at least %2$s hour of notice. The earliest available pickup is %3$s.',
+                        '%1$s needs at least %2$s hours of notice. The earliest available pickup is %3$s.',
+                        $buffer_hours,
+                        'booking-and-rental-manager-for-woocommerce'
+                    ),
+                    esc_html( get_the_title( $rbfw_id ) ),
+                    esc_html( number_format_i18n( $buffer_hours ) ),
+                    esc_html( wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $earliest->getTimestamp() ) )
+                ),
+                'error'
+            );
+
+            if ( wp_doing_ajax() ) {
+                wc_print_notices();
+                wp_die();
+            }
+
+            return false;
+        }
+
         public function rbfw_validate_availability_add_to_cart( $passed, $product_id, $quantity = 1 ) {
             if ( ! $passed ) {
                 return $passed; // already rejected by another validator
@@ -514,8 +647,7 @@ if (!class_exists('RBFW_Woocommerce')) {
         }
 
         private function rbfw_prepare_multi_item_fees_from_post( $rbfw_id, $submitted_fees, $sub_total_price ) {
-            $stored_fees = get_post_meta( $rbfw_id, 'rbfw_fee_data', true );
-            $stored_fees = is_array( $stored_fees ) ? $stored_fees : array();
+            $stored_fees = rbfw_get_enabled_fee_data( $rbfw_id );
             $fee_info    = array();
             $fee_total   = 0;
 
@@ -711,6 +843,29 @@ if (!class_exists('RBFW_Woocommerce')) {
                     $end_date = $bikecarsd_selected_date;
                 }
                 $rbfw_start_datetime = $rbfw_bikecarsd_selected_date;
+
+                // Single-day item variations: the base rental is charged ONCE. Each
+                // selected value only adds its own price (surcharge, computed below) and
+                // reserves per-value stock (from rbfw_variation_info, independent of this
+                // quantity). So the duration rate must never be multiplied by the variation
+                // total — force the base quantity to 1 whenever a value is selected. Done
+                // server-side too (not just in JS) so the cart price is authoritative.
+                if ( get_post_meta( $rbfw_id, 'rbfw_enable_variations', true ) === 'yes'
+                    && isset( $sd_input_data_sabitized['rbfw_variation_qty'] )
+                    && is_array( $sd_input_data_sabitized['rbfw_variation_qty'] ) ) {
+                    foreach ( $sd_input_data_sabitized['rbfw_variation_qty'] as $rbfw_vq_values ) {
+                        if ( ! is_array( $rbfw_vq_values ) ) {
+                            continue;
+                        }
+                        foreach ( $rbfw_vq_values as $rbfw_vq ) {
+                            if ( (int) $rbfw_vq > 0 ) {
+                                $rbfw_item_quantity = 1;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+
                 $rbfw_type_info_all = isset( $sd_input_data_sabitized['rbfw_bikecarsd_info'] ) ? $sd_input_data_sabitized['rbfw_bikecarsd_info'] : [];
                 $rbfw_type_info = array();
                 if ( isset( $sd_input_data_sabitized['service_type'] ) ) {
@@ -794,8 +949,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                     }
                 }
 
-                $rbfw_fee_data = get_post_meta( $rbfw_id, 'rbfw_fee_data', true );
-                $rbfw_fee_data = is_array( $rbfw_fee_data ) ? $rbfw_fee_data : array();
+                $rbfw_fee_data = rbfw_get_enabled_fee_data( $rbfw_id );
                 foreach ( $rbfw_fee_data as $fee ) {
                     $service_label = ! empty( $fee['label'] ) ? $fee['label'] : '';
                     $priority = ! empty( $fee['priority'] ) ? $fee['priority'] : 'optional';
@@ -1153,8 +1307,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                     }
                 }
 
-                $rbfw_fee_data = get_post_meta( $rbfw_id, 'rbfw_fee_data', true );
-                $rbfw_fee_data = is_array( $rbfw_fee_data ) ? $rbfw_fee_data : array();
+                $rbfw_fee_data = rbfw_get_enabled_fee_data( $rbfw_id );
                 foreach ( $rbfw_fee_data as $fee ) {
                     $service_label = ! empty( $fee['label'] ) ? $fee['label'] : '';
                     $priority = ! empty( $fee['priority'] ) ? $fee['priority'] : 'optional';
@@ -1269,6 +1422,67 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
             }
         }
+        /**
+         * Rebuild the "Variation Information" order-item meta at display time so each value
+         * shows its quantity and per-unit price. Works for orders placed before qty/price
+         * were stored in the meta HTML, because it reads the raw _rbfw_ticket_info kept on
+         * the line item. Only touches the variation meta; every other meta value passes
+         * through unchanged.
+         *
+         * @param string $display_value The formatted meta value WooCommerce is about to show.
+         * @param object $meta          The WC_Meta_Data (has ->key / ->value).
+         * @param object $item          The WC_Order_Item.
+         * @return string
+         */
+        public function rbfw_variation_meta_with_qty( $display_value, $meta, $item ) {
+            if ( ! is_object( $meta ) || ! isset( $meta->key ) || ! is_a( $item, 'WC_Order_Item' ) ) {
+                return $display_value;
+            }
+            $label = function_exists( 'rbfw_string_return' )
+                ? rbfw_string_return( 'rbfw_text_variation_information', esc_html__( 'Variation Information', 'booking-and-rental-manager-for-woocommerce' ) )
+                : esc_html__( 'Variation Information', 'booking-and-rental-manager-for-woocommerce' );
+            if ( $meta->key !== $label ) {
+                return $display_value;
+            }
+
+            $ticket_info = $item->get_meta( '_rbfw_ticket_info' );
+            if ( ! is_array( $ticket_info ) ) {
+                return $display_value;
+            }
+
+            $rows = array();
+            foreach ( $ticket_info as $ticket ) {
+                if ( is_array( $ticket ) && ! empty( $ticket['rbfw_variation_info'] ) && is_array( $ticket['rbfw_variation_info'] ) ) {
+                    foreach ( $ticket['rbfw_variation_info'] as $v ) {
+                        if ( is_array( $v ) ) {
+                            $rows[] = $v;
+                        }
+                    }
+                }
+            }
+            if ( empty( $rows ) ) {
+                return $display_value; // no structured data — keep whatever was stored.
+            }
+
+            $html = '<table style="border:1px solid #f5f5f5;margin:0;width: 100%;">';
+            foreach ( $rows as $value ) {
+                $text  = esc_html( $value['field_value'] ?? '' );
+                $qty   = isset( $value['qty'] ) ? (int) $value['qty'] : 0;
+                $price = isset( $value['price'] ) ? (float) $value['price'] : 0;
+                if ( $qty > 0 ) {
+                    $text .= ' &times; ' . esc_html( $qty );
+                }
+                if ( $price > 0 ) {
+                    $text .= ' (+' . wp_kses_post( wc_price( $price ) ) . ')';
+                }
+                $html .= '<tr><td style="border:1px solid #f5f5f5;"><strong>' . esc_html( $value['field_label'] ?? '' ) . '</strong></td>';
+                $html .= '<td style="border:1px solid #f5f5f5;">' . $text . '</td></tr>';
+            }
+            $html .= '</table>';
+
+            return $html;
+        }
+
         public   function rbfw_add_order_item_data( $item, $cart_item_key, $values, $order ) {
             global $rbfw;
             $rbfw_id = array_key_exists( 'rbfw_id', $values ) ? $values['rbfw_id'] : 0;
@@ -1296,7 +1510,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $rbfw_ticket_info = $values['rbfw_ticket_info'] ? $values['rbfw_ticket_info'] : [];
                 $rbfw_room_info = $values['rbfw_room_info'] ? $values['rbfw_room_info'] : [];
                 $rbfw_management_info = $values['rbfw_management_info'] ? $values['rbfw_management_info'] : [];
-                $rbfw_fee_data = get_post_meta($rbfw_id, 'rbfw_fee_data', true) ? get_post_meta($rbfw_id, 'rbfw_fee_data', true) : array();
+                $rbfw_fee_data = rbfw_get_enabled_fee_data( $rbfw_id );
 
 
 
@@ -1633,7 +1847,12 @@ if (!class_exists('RBFW_Woocommerce')) {
                     foreach ( $variation_info as $key => $value ) {
                         $variation_content .= '<tr>';
                         $variation_content .= '<td style="border:1px solid #f5f5f5;"><strong>' . esc_html( $value['field_label'] ?? '' ) . '</strong></td>';
-                        $variation_content .= '<td style="border:1px solid #f5f5f5;">' . esc_html( $value['field_value'] ?? '' ) . '</td>';
+                        $rbfw_vi_text  = esc_html( $value['field_value'] ?? '' );
+                        $rbfw_vi_qty   = isset( $value['qty'] ) ? (int) $value['qty'] : 0;
+                        $rbfw_vi_price = isset( $value['price'] ) ? (float) $value['price'] : 0;
+                        if ( $rbfw_vi_qty > 0 ) { $rbfw_vi_text .= ' &times; ' . esc_html( $rbfw_vi_qty ); }
+                        if ( $rbfw_vi_price > 0 ) { $rbfw_vi_text .= ' (+' . wp_kses_post( wc_price( $rbfw_vi_price ) ) . ')'; }
+                        $variation_content .= '<td style="border:1px solid #f5f5f5;">' . $rbfw_vi_text . '</td>';
                         $variation_content .= '</tr>';
                     }
                     $variation_content .= '</table>';
@@ -2031,7 +2250,12 @@ if (!class_exists('RBFW_Woocommerce')) {
                     foreach ( $variation_info as $key => $value ) {
                         $variation_content .= '<tr>';
                         $variation_content .= '<td style="border:1px solid #f5f5f5;"><strong>' . esc_html( $value['field_label'] ?? '' ) . '</strong></td>';
-                        $variation_content .= '<td style="border:1px solid #f5f5f5;">' . esc_html( $value['field_value'] ?? '' ) . '</td>';
+                        $rbfw_vi_text  = esc_html( $value['field_value'] ?? '' );
+                        $rbfw_vi_qty   = isset( $value['qty'] ) ? (int) $value['qty'] : 0;
+                        $rbfw_vi_price = isset( $value['price'] ) ? (float) $value['price'] : 0;
+                        if ( $rbfw_vi_qty > 0 ) { $rbfw_vi_text .= ' &times; ' . esc_html( $rbfw_vi_qty ); }
+                        if ( $rbfw_vi_price > 0 ) { $rbfw_vi_text .= ' (+' . wp_kses_post( wc_price( $rbfw_vi_price ) ) . ')'; }
+                        $variation_content .= '<td style="border:1px solid #f5f5f5;">' . $rbfw_vi_text . '</td>';
                         $variation_content .= '</tr>';
                     }
                     $variation_content .= '</table>';
@@ -2526,7 +2750,7 @@ if (!class_exists('RBFW_Woocommerce')) {
 
             // Get extra service pricing
             $service_data = get_post_meta($product_id, 'rbfw_extra_service_data', true) ?: array();
-            $rbfw_fee_data = get_post_meta($product_id, 'rbfw_fee_data', true) ?: array();
+            $rbfw_fee_data = rbfw_get_enabled_fee_data( $product_id );
             $extra_services = !empty($service_data) ? array_column($service_data, 'service_price', 'service_name') : array();
 
             // Loop through selected rooms
@@ -2625,7 +2849,6 @@ if (!class_exists('RBFW_Woocommerce')) {
     }
     new RBFW_Woocommerce();
 }
-
 
 
 

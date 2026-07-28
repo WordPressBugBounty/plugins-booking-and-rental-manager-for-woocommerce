@@ -504,6 +504,23 @@ function rbfw_url_exclude_search_engine() {
         global $rbfw;
 		return $rbfw->get_option_trans( $option, $section, $default );
 	}
+	if ( ! function_exists( 'rbfw_allow_duplicate_rental_cart_items' ) ) {
+		/**
+		 * Whether the same rental product may be added to the cart more than once.
+		 *
+		 * Read the stored settings array directly so this value is also reliable in
+		 * WP-CLI and background contexts where rbfw_get_option() intentionally skips.
+		 *
+		 * @return bool
+		 */
+		function rbfw_allow_duplicate_rental_cart_items() {
+			$settings = get_option( 'rbfw_basic_gen_settings', array() );
+
+			return is_array( $settings )
+				&& isset( $settings['rbfw_allow_duplicate_rental_cart_item'] )
+				&& 'yes' === $settings['rbfw_allow_duplicate_rental_cart_item'];
+		}
+	}
 	// Deprecated function - use esc_html_e() instead
 	function rbfw_string( $option_name, $default_string ) {
 		echo esc_html( $default_string );
@@ -1892,6 +1909,142 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 		} else {
 			return false;
 		}
+	}
+	/****************************************************
+	 * Date-wise Min/Max booking-day ranges for an item
+	 *
+	 * Single resolution point for every per-date-range min/max override that can
+	 * apply to a rental item. It starts with the Min & Max Booking Day addon's own
+	 * date-wise rows, then lets other addons (Seasonal Pricing, for one) contribute
+	 * their periods through the `rbfw_datewise_minmax_ranges` filter. Without this
+	 * a second addon would have to duplicate the whole front-end resolution.
+	 *
+	 * Each returned range is [ start_date, end_date, min_days, max_days ]. A limit
+	 * left as '' means "keep the item's global value"; a real number — 0 included,
+	 * which reads as "no cap" for max — overrides it. Earlier ranges win, so the
+	 * addon's explicit rows take precedence over anything appended afterwards.
+	 *
+	 * @param int $post_id Rental item ID.
+	 * @return array<int,array<string,mixed>>
+	 ****************************************************/
+	function rbfw_get_datewise_minmax_ranges( $post_id ) {
+		$post_id = absint( $post_id );
+		$ranges  = array();
+
+		if ( ! $post_id || ! rbfw_check_min_max_booking_day_active() ) {
+			return $ranges;
+		}
+
+		if ( get_post_meta( $post_id, 'rbfw_enable_datewise_minmax', true ) === 'yes' ) {
+			$datewise = get_post_meta( $post_id, 'rbfw_datewise_minmax', true );
+			if ( is_array( $datewise ) ) {
+				$ranges = array_values( $datewise );
+			}
+		}
+
+		$ranges = apply_filters( 'rbfw_datewise_minmax_ranges', $ranges, $post_id );
+		if ( ! is_array( $ranges ) ) {
+			return array();
+		}
+
+		$clean = array();
+		foreach ( $ranges as $range ) {
+			if ( ! is_array( $range ) ) {
+				continue;
+			}
+
+			$start = isset( $range['start_date'] ) ? sanitize_text_field( (string) $range['start_date'] ) : '';
+			$end   = isset( $range['end_date'] ) ? sanitize_text_field( (string) $range['end_date'] ) : '';
+			if ( '' === $start || '' === $end || ! strtotime( $start ) || ! strtotime( $end ) ) {
+				continue;
+			}
+
+			$min = ( isset( $range['min_days'] ) && '' !== $range['min_days'] && is_numeric( $range['min_days'] ) )
+				? absint( $range['min_days'] ) : '';
+			$max = ( isset( $range['max_days'] ) && '' !== $range['max_days'] && is_numeric( $range['max_days'] ) )
+				? absint( $range['max_days'] ) : '';
+
+			// A range that overrides neither limit would only shadow later ranges.
+			if ( '' === $min && '' === $max ) {
+				continue;
+			}
+
+			$clean[] = array(
+				'start_date' => $start,
+				'end_date'   => $end,
+				'min_days'   => $min,
+				'max_days'   => $max,
+			);
+		}
+
+		return $clean;
+	}
+
+	/****************************************************
+	 * Midnight timestamp for a booking date
+	 *
+	 * Drops any time component before parsing so two dates can be compared, and
+	 * subtracted, as whole calendar days. Parsing "Y-m-d H:i" and then trimming
+	 * would be timezone-dependent; trimming the string first is not.
+	 *
+	 * @param string $value Date, optionally with a time component.
+	 * @return int|false Timestamp at local midnight, or false when unparseable.
+	 ****************************************************/
+	function rbfw_booking_day_timestamp( $value ) {
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return false;
+		}
+
+		if ( preg_match( '/^(\d{4}-\d{2}-\d{2})/', $value, $matches ) ) {
+			return strtotime( $matches[1] . ' 00:00:00' );
+		}
+
+		$parsed = strtotime( $value );
+
+		return $parsed ? strtotime( gmdate( 'Y-m-d', $parsed ) . ' 00:00:00' ) : false;
+	}
+
+	/****************************************************
+	 * Effective min/max booking days for a pick-up date
+	 *
+	 * Server-side twin of rbfwEffectiveMinMax() in md_script.js: the first
+	 * date-wise range containing $start_date wins, and any limit it leaves unset
+	 * falls back to the item's global value.
+	 *
+	 * @param int    $post_id    Rental item ID.
+	 * @param string $start_date Pick-up date (Y-m-d).
+	 * @return array{min:int,max:int} Days; 0 means "not limited".
+	 ****************************************************/
+	function rbfw_get_effective_minmax_days( $post_id, $start_date ) {
+		$post_id = absint( $post_id );
+		$eff     = array(
+			'min' => (int) get_post_meta( $post_id, 'rbfw_minimum_booking_day', true ),
+			'max' => (int) get_post_meta( $post_id, 'rbfw_maximum_booking_day', true ),
+		);
+
+		// Compare whole days so a time component can't push a date out of its range.
+		$start_ts = rbfw_booking_day_timestamp( $start_date );
+		if ( ! $start_ts ) {
+			return $eff;
+		}
+
+		foreach ( rbfw_get_datewise_minmax_ranges( $post_id ) as $range ) {
+			$from = rbfw_booking_day_timestamp( $range['start_date'] );
+			$to   = rbfw_booking_day_timestamp( $range['end_date'] );
+			if ( ! $from || ! $to || $start_ts < $from || $start_ts > $to ) {
+				continue;
+			}
+			if ( '' !== $range['min_days'] ) {
+				$eff['min'] = (int) $range['min_days'];
+			}
+			if ( '' !== $range['max_days'] ) {
+				$eff['max'] = (int) $range['max_days'];
+			}
+			break;
+		}
+
+		return $eff;
 	}
 	/****************************************************
 	 * Check Discount Over Days Plugin Active
@@ -3339,11 +3492,12 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
 
                         if($rbfw_enable_hourly_threshold=='yes' && $hours >= $rbfw_hourly_threshold){
                             $actual_days = $days+1;
-                            $duration_price += $rbfw_daily_rate * $actual_days;
+                            // Leftover days (day-wise aware; flat daily when day-wise is off).
+                            $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $actual_days, $rbfw_daily_rate );
                         }else{
                             $rbfw_hourly_rate = get_post_meta( $post_id, 'rbfw_hourly_rate', true );
                             $day_slug         = strtolower( gmdate( 'D', strtotime( $start_date ) ) );
-                            $duration_price  += (float) $rbfw_daily_rate * (float) $days;
+                            $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $days, $rbfw_daily_rate );
                             $duration_price  += rbfw_md_price_for_hours_period(
                                 $post_id,
                                 $hours,
@@ -3391,11 +3545,12 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
 
                 if($rbfw_enable_hourly_threshold=='yes' && $hours >= $rbfw_hourly_threshold){
                     $thresold_days = $daysWeeks+1;
-                    $duration_price += $rbfw_daily_rate * $thresold_days;
+                    // Leftover days (day-wise aware; flat daily when day-wise is off).
+                    $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $thresold_days, $rbfw_daily_rate );
                 }else{
                     $rbfw_hourly_rate = get_post_meta( $post_id, 'rbfw_hourly_rate', true );
                     $day_slug         = strtolower( gmdate( 'D', strtotime( $start_date ) ) );
-                    $duration_price  += (float) $rbfw_daily_rate * (float) $daysWeeks;
+                    $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $daysWeeks, $rbfw_daily_rate );
                     $duration_price  += rbfw_md_price_for_hours_period(
                         $post_id,
                         $hours,
@@ -3700,6 +3855,35 @@ function rbfw_get_day_rate($post_id, $day, $daily_rate, $seasonal_prices, $date,
     return ( $enabled === 'yes' && $custom_rate !== '' && $custom_rate !== null )
         ? (float) $custom_rate
         : (float) $daily_rate;
+}
+
+/**
+ * Sum the daily rate for a run of $count consecutive days starting $offset days
+ * after $start_date, honouring day-wise (per-weekday) pricing.
+ *
+ * The monthly / weekly price branches bill whole months and weeks at their bulk
+ * rate and were pricing the *leftover* days at the flat daily rate — so a
+ * per-weekday (day-wise) price never applied once a weekly/monthly rate was on.
+ * This helper prices those leftover days per weekday instead.
+ *
+ * Backward compatible: rbfw_get_day_rate() returns the flat daily rate for any
+ * weekday without a day-wise override, so for an item with day-wise pricing OFF
+ * the total equals $daily_rate * $count exactly — identical to the old code.
+ *
+ * @return float
+ */
+function rbfw_daywise_days_sum( $post_id, $start_date, $offset, $count, $daily_rate ) {
+    $sum = 0.0;
+    for ( $j = 0; $j < (int) $count; $j++ ) {
+        $day_offset = (int) $offset + $j;
+        $date       = gmdate( 'Y-m-d', strtotime( "+{$day_offset} day", strtotime( $start_date ) ) );
+        $slug       = strtolower( gmdate( 'D', strtotime( $date ) ) );
+        // Seasonal pricing is intentionally not applied here — the monthly/weekly
+        // leftover path never applied it before, so passing '' keeps behaviour
+        // identical for non-day-wise items.
+        $sum += rbfw_get_day_rate( $post_id, $slug, $daily_rate, '', $date );
+    }
+    return $sum;
 }
 
 function rbfw_get_half_day_rate($post_id, $day, $rbfw_half_day_rate, $seasonal_prices, $date, $hours = 0, $enable_daily = 'yes') {
@@ -4302,10 +4486,11 @@ function numberToOrdinal($number) {
 
 if (!function_exists('rbfw_day_row_md')) {
     function rbfw_day_row_md( $day_name, $day_slug ) {
-        $hourly_rate = get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_hourly_rate', true ) ? get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_hourly_rate', true ) : '';
-        $daily_rate  = get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_daily_rate', true ) ? get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_daily_rate', true ) : '';
-        $enable      = !empty(get_post_meta( get_the_id(), 'rbfw_enable_' . $day_slug . '_day', true )) ? get_post_meta( get_the_id(), 'rbfw_enable_' . $day_slug . '_day', true ) : '';
-        return array('enable'=>$enable,'day_name'=>$day_name,'daily_rate'=>$daily_rate,'hourly_rate'=>$hourly_rate);
+        $hourly_rate   = get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_hourly_rate', true ) ? get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_hourly_rate', true ) : '';
+        $daily_rate    = get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_daily_rate', true ) ? get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_daily_rate', true ) : '';
+        $half_day_rate = get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_half_day_rate', true ) ? get_post_meta( get_the_id(), 'rbfw_' . $day_slug . '_half_day_rate', true ) : '';
+        $enable        = !empty(get_post_meta( get_the_id(), 'rbfw_enable_' . $day_slug . '_day', true )) ? get_post_meta( get_the_id(), 'rbfw_enable_' . $day_slug . '_day', true ) : '';
+        return array('enable'=>$enable,'day_name'=>$day_name,'daily_rate'=>$daily_rate,'hourly_rate'=>$hourly_rate,'half_day_rate'=>$half_day_rate);
     }
 }
 

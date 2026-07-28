@@ -174,17 +174,18 @@ function rbfw_off_day_dates(date,type='',today_enable='no',dropoff=null){
     var curr_year = date.getFullYear();
     var date_in = curr_date+"-"+curr_month+"-"+curr_year;
     var date_today = new Date();
-    var rbfw_buffer_time = parseInt(jQuery("#rbfw_buffer_time").val());
+    var rbfw_buffer_time = parseInt(jQuery("#rbfw_buffer_time").val()) || 0;
 
-
+    // Buffer (lead time) and "today booking enabled" are independent settings and
+    // must compose. Previously a non-zero buffer always took the -1 day branch,
+    // which silently ignored today_enable='no' and left today bookable. The -1 day
+    // is what allows today, so it must depend on today_enable alone.
+    // Mirrors the composition already used in md_script.js.
     if(rbfw_buffer_time){
-        date_today = new Date(date_today);
         date_today.setHours(date_today.getHours() + rbfw_buffer_time);
+    }
+    if(today_enable=='yes'){
         date_today.setDate(date_today.getDate() - 1);
-    }else{
-        if(today_enable=='yes'){
-            date_today.setDate(date_today.getDate() - 1);
-        }
     }
 
     //alert(date_today);
@@ -297,7 +298,9 @@ function rbfwTimeToMinutes(t) {
 
 function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_particular,is_calendar=null) {
 
-    var rbfw_buffer_time = parseInt(jQuery("#rbfw_buffer_time").val());
+    // Fall back to 0 when the buffer field is absent/empty: NaN here would make
+    // setHours() below produce an Invalid Date, silently disabling the past-time check.
+    var rbfw_buffer_time = parseInt(jQuery("#rbfw_buffer_time").val()) || 0;
 
 
     var scheduleJson = [];
@@ -343,7 +346,12 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
     if(is_calendar=='calendar'){
         timeSelect.innerHTML = '';
     }else{
-        timeSelect.innerHTML = '<option value="">'+ rbfw_translation.pickup_time +'</option>'; // reset options
+        // This function fills both #pickup_time and #dropoff_time, so the placeholder
+        // must follow the field being filled — otherwise Return Time reads "Pickup Time".
+        var rbfw_time_placeholder = (pickup_time_particular === 'dropoff_time')
+            ? (rbfw_translation.return_time || rbfw_translation.pickup_time)
+            : rbfw_translation.pickup_time;
+        timeSelect.innerHTML = '<option value="">'+ rbfw_time_placeholder +'</option>'; // reset options
     }
 
 
@@ -1147,14 +1155,21 @@ jQuery(function ($) {
         $form.find('.timely_quqntity_table').hide();
         $form.find('.rbfw_quantity_md').hide();
 
-        // Mirror the summed qty into whichever quantity field the form submits so the
-        // server sees the total. Add the option when it is a <select>.
+        // Single-day variations charge the base rental rate ONCE: a value's price is
+        // added separately as a surcharge, so its quantity must NOT multiply the
+        // duration rate. Keep the submitted base quantity at 1 for the timely
+        // single-day form; multi-day still lets the steppers own the quantity.
+        var isSdTimely = $form.find('.rbfw_quantiry_area_sd').length > 0;
+        var qtyToSet   = isSdTimely ? 1 : totalQty;
+
+        // Mirror the base quantity into whichever quantity field the form submits so
+        // the server sees it. Add the option when it is a <select>.
         var $qty = $form.find('#rbfw_item_quantity, #rbfw_item_quantity_md').first();
         if ($qty.length) {
-            if ($qty.is('select') && !$qty.find('option[value="' + totalQty + '"]').length) {
-                $qty.append($('<option>', { value: totalQty, text: totalQty }));
+            if ($qty.is('select') && !$qty.find('option[value="' + qtyToSet + '"]').length) {
+                $qty.append($('<option>', { value: qtyToSet, text: qtyToSet }));
             }
-            $qty.val(String(totalQty));
+            $qty.val(String(qtyToSet));
         }
 
         // Book button reflects whether anything is selected.
@@ -1162,12 +1177,12 @@ jQuery(function ($) {
         if (totalQty > 0) $btn.prop('disabled', false).removeClass('rbfw_disabled_button');
         else $btn.prop('disabled', true).addClass('rbfw_disabled_button');
 
-        if ($form.find('.rbfw_quantiry_area_sd').length) {
-            // Timely single-day: #rbfw_service_price holds the duration cost ONLY
-            // (totalQty × rate). The per-value surcharge is summed and rendered as
-            // its own line by rbfw_price_calculation_sd().
+        if (isSdTimely) {
+            // Timely single-day: #rbfw_service_price holds the duration cost ONLY, and
+            // the base rental is charged once (rate × 1). The per-value surcharge is
+            // summed and rendered as its own line by rbfw_price_calculation_sd().
             var rate = parseFloat($form.find('.rbfw_sd_price_input').val()) || 0;
-            $form.find('#rbfw_service_price').val((totalQty * rate).toFixed(2));
+            $form.find('#rbfw_service_price').val(rate.toFixed(2));
             if (typeof rbfw_price_calculation_sd === 'function') rbfw_price_calculation_sd();
         } else if ($form.find('#rbfw_item_quantity_md').length) {
             // Multi-day: schedule the AJAX price recalculation so the variation

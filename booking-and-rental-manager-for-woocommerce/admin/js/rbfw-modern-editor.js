@@ -226,7 +226,7 @@
                 } else {
                     window.alert((resp && resp.data && resp.data.message) || 'Action failed.');
                 }
-            }).fail(function () { window.alert('Request failed.'); });
+            }).fail(function () { window.alert((rbfwModernEditor_i18n('Request failed.') || 'Request failed.')); });
         }
 
         // Rebuild the manage list + every pick-up/drop-off checkbox group from the
@@ -240,8 +240,8 @@
                     '<li class="rbfw-me-loc-row" data-term-id="' + loc.term_id + '" data-value="' + locEsc(loc.value) + '">' +
                         '<span class="rbfw-me-loc-row__name">' + locEsc(loc.name) + '</span>' +
                         '<span class="rbfw-me-loc-row__actions">' +
-                            '<button type="button" class="rbfw-me-loc-edit" title="Rename"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
-                            '<button type="button" class="rbfw-me-loc-delete" title="Delete"><i class="fas fa-trash-can" aria-hidden="true"></i></button>' +
+                            '<button type="button" class="rbfw-me-loc-edit" title="' + (rbfwModernEditor_i18n('Rename') || 'Rename') + '"><i class="fas fa-pen" aria-hidden="true"></i></button>' +
+                            '<button type="button" class="rbfw-me-loc-delete" title="' + (rbfwModernEditor_i18n('Delete') || 'Delete') + '"><i class="fas fa-trash-can" aria-hidden="true"></i></button>' +
                         '</span>' +
                     '</li>'
                 );
@@ -315,7 +315,7 @@
         $wrap.on('click', '.rbfw-me-loc-delete', function () {
             var $row    = $(this).closest('.rbfw-me-loc-row');
             var $manage = $(this).closest('.rbfw-me-loc-manage');
-            if (! window.confirm('Delete this location? Items using it will no longer reference it.')) return;
+            if (! window.confirm((rbfwModernEditor_i18n('Delete this location? Items using it will no longer reference it.') || 'Delete this location? Items using it will no longer reference it.'))) return;
             locAjax('rbfw_location_delete', { term_id: $row.data('term-id') }, $manage);
         });
 
@@ -333,6 +333,21 @@
             e.stopPropagation();
             $(this).val(this.checked ? 'on' : 'off');
             syncTimelyUI($(this).closest('.rbfw-me-panel'));
+        });
+
+        // Category-wise extra services toggle. Old-style toggle: the value attribute
+        // ('on'/'off') is what collectFormData() persists, and the classic
+        // mkb-admin.js handler self-disables inside .rbfw-me-wrap — so sync the value
+        // here and reveal/hide the service-category fields, mirroring the classic UI.
+        $wrap.on('click', '[name="rbfw_enable_category_service_price"]', function (e) {
+            e.stopPropagation();
+            $(this).val(this.checked ? 'on' : 'off');
+            var $fields = $wrap.find('#field-wrapper-rbfw_service_category_price');
+            if (this.checked) {
+                $fields.stop(true, true).slideDown(200).removeClass('hide').addClass('show');
+            } else {
+                $fields.stop(true, true).slideUp(200).removeClass('show').addClass('hide');
+            }
         });
     }
 
@@ -591,7 +606,7 @@
             var $img = $(this).find('img');
             if (!$img.length || $(this).find('.rbfw-me-tpl-preview-btn').length) return;
             $(this).append(
-                '<button type="button" class="rbfw-me-tpl-preview-btn" title="Preview">' +
+                '<button type="button" class="rbfw-me-tpl-preview-btn" title="' + (rbfwModernEditor_i18n('Preview') || 'Preview') + '">' +
                     '<span class="dashicons dashicons-visibility"></span>' +
                 '</button>'
             );
@@ -1227,7 +1242,20 @@
     }
 
     function doSave(status) {
-        if ( ! validateBeforeSave() ) return;
+        // Never abort the request on a validation failure — doing so used to
+        // silently discard every Advanced-tab change (Template, FAQ toggle, Tax,
+        // Security Deposit, Terms, Related, Front-end Display, …) whenever the
+        // pricing/description/time-slots were still incomplete.
+        //
+        //   • A draft may legitimately be incomplete, so it always saves as-is.
+        //   • Publishing still runs the full client-side checks so the exact
+        //     problems are highlighted inline; but instead of blocking, an
+        //     incomplete item is saved as a *draft* so nothing the user entered
+        //     is lost. This mirrors the server, which keeps an incomplete item
+        //     out of "publish" status and returns the pricing errors.
+        if ( status === 'publish' && ! validateBeforeSave() ) {
+            status = 'draft';
+        }
 
         setSaveIndicator('saving', cfg.i18n && cfg.i18n.saving || 'Saving your changes…');
 
@@ -1239,18 +1267,28 @@
 
         $.post(cfg.ajax_url, data, function (res) {
             if (res.success) {
-                setSaveIndicator('saved', cfg.i18n && cfg.i18n.saved || 'All changes saved');
+                var savedStatus = (res.data && res.data.post_status) || status;
+                var pricingErrors = (res.data && res.data.pricing_errors) || [];
+
+                if (status === 'publish' && pricingErrors.length && savedStatus !== 'publish') {
+                    // Everything was saved, but the item couldn't go live because the
+                    // pricing setup is incomplete — surface that without discarding input.
+                    setSaveIndicator('error', pricingErrors.join(' '));
+                } else {
+                    setSaveIndicator('saved', cfg.i18n && cfg.i18n.saved || 'All changes saved');
+                    setTimeout(function () { setSaveIndicator('', ''); }, 4500);
+                }
+
                 // Update publish button label if status changed
-                if (status === 'publish') {
+                if (savedStatus === 'publish') {
                     $wrap.find('.rbfw-me-publish').text(cfg.i18n && cfg.i18n.update || 'Update').data('published', '1');
                 }
                 // Update status dot
                 var $dot   = $wrap.find('.rbfw-me-status-dot');
                 var $label = $wrap.find('.rbfw-me-status-label');
-                $dot.attr('class', 'rbfw-me-status-dot rbfw-me-status-dot--' + status);
-                $label.text(status.charAt(0).toUpperCase() + status.slice(1));
-
-                setTimeout(function () { setSaveIndicator('', ''); }, 4500);
+                $dot.attr('class', 'rbfw-me-status-dot rbfw-me-status-dot--' + savedStatus);
+                $label.text(savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1));
+                $wrap.find('select.rbfw-me-select[name="post_status"]').val(savedStatus);
             } else {
                 var errorMsg = cfg.i18n && cfg.i18n.save_error || 'Save failed — please try again';
                 if (res.data && res.data.message) {
@@ -1378,8 +1416,8 @@
         function meActionsHtml() {
             if (!meCanManage()) { return ''; }
             return '<span class="rbfw-rt-actions">' +
-                '<span class="rbfw-rt-edit dashicons dashicons-edit" title="Edit"></span>' +
-                '<span class="rbfw-rt-del dashicons dashicons-trash" title="Delete"></span>' +
+                '<span class="rbfw-rt-edit dashicons dashicons-edit" title="' + (rbfwModernEditor_i18n('Edit') || 'Edit') + '"></span>' +
+                '<span class="rbfw-rt-del dashicons dashicons-trash" title="' + (rbfwModernEditor_i18n('Delete') || 'Delete') + '"></span>' +
             '</span>';
         }
 
@@ -1498,7 +1536,7 @@
             var termId = parseInt($chip.data('term-id'), 10) || 0;
             var name   = $chip.data('name');
             if (!termId) { return; }
-            if (!window.confirm('Delete rent type "' + name + '"? Items using it will have this type removed.')) { return; }
+            if (!window.confirm((rbfwModernEditor_i18n('Delete rent type "%s"? Items using it will have this type removed.') || 'Delete rent type "%s"? Items using it will have this type removed.').replace('%s', name))) { return; }
             $.post(window.ajaxurl, {
                 action: 'rbfw_rent_type_delete',
                 nonce:  meNonce(),
@@ -1513,7 +1551,7 @@
                 } else {
                     window.alert((resp && resp.data && resp.data.message) || 'Action failed.');
                 }
-            }).fail(function () { window.alert('Request failed.'); });
+            }).fail(function () { window.alert((rbfwModernEditor_i18n('Request failed.') || 'Request failed.')); });
         });
 
         $wrap.on('click', '#rbfw-me-rent-type-modal .rbfw-me-faq-modal__close, #rbfw-me-rent-type-modal .rbfw-me-faq-modal__backdrop, .rbfw-me-rent-type-modal-cancel', function () {
@@ -1544,7 +1582,7 @@
                     } else {
                         window.alert((resp && resp.data && resp.data.message) || 'Action failed.');
                     }
-                }).fail(function () { window.alert('Request failed.'); });
+                }).fail(function () { window.alert((rbfwModernEditor_i18n('Request failed.') || 'Request failed.')); });
             } else {
                 $.post(window.ajaxurl, {
                     action: 'rbfw_rent_type_add',
@@ -1558,7 +1596,7 @@
                     } else {
                         window.alert((resp && resp.data && resp.data.message) || 'Action failed.');
                     }
-                }).fail(function () { window.alert('Request failed.'); });
+                }).fail(function () { window.alert((rbfwModernEditor_i18n('Request failed.') || 'Request failed.')); });
             }
         });
 
@@ -1639,8 +1677,8 @@
                 + '<td><div class="features_category_wrapper">'
                 + '<div class="field-list rbfw_feature_category">'
                 + '<div class="feature_category_inner_wrap">'
-                + '<div class="feature_category_title"><label>Feature Category Title</label>'
-                + '<input type="text" name="rbfw_feature_category[' + nextCat + '][cat_title]" data-key="' + nextCat + '" placeholder="Feature Category Label" />'
+                + '<div class="feature_category_title"><label>' + (rbfwModernEditor_i18n('Feature Category Title') || 'Feature Category Title') + '</label>'
+                + '<input type="text" name="rbfw_feature_category[' + nextCat + '][cat_title]" data-key="' + nextCat + '" placeholder="' + (rbfwModernEditor_i18n('Feature Category Label') || 'Feature Category Label') + '" />'
                 + '<div class="rbfw-me-features-actions"><span class="button tr_sort_handler"><i class="fas fa-arrows-alt"></i></span><span class="button tr_remove"><i class="fas fa-trash-can"></i></span></div>'
                 + '</div>'
                 + '<div class="feature_category_inner_item_wrap sortable">'
@@ -1648,7 +1686,7 @@
                 + '<a href="#rbfw_features_icon_list_wrapper" class="rbfw_feature_icon_btn btn" data-key="0"><i class="fas fa-circle-plus"></i> Icon</a>'
                 + '<div class="rbfw_feature_icon_preview" data-key="0"></div>'
                 + '<input type="hidden" name="rbfw_feature_category[' + nextCat + '][cat_features][0][icon]" data-key="0" class="rbfw_feature_icon" />'
-                + '<input type="text" name="rbfw_feature_category[' + nextCat + '][cat_features][0][title]" placeholder="Features Name" data-key="0" />'
+                + '<input type="text" name="rbfw_feature_category[' + nextCat + '][cat_features][0][title]" placeholder="' + (rbfwModernEditor_i18n('Features Name') || 'Features Name') + '" data-key="0" />'
                 + '<div><span class="button sort"><i class="fas fa-arrows-alt"></i></span>'
                 + '<span class="button remove" onclick="jQuery(this).parent().parent().remove()"><i class="fas fa-trash-can"></i></span></div>'
                 + '</div></div></div></div>'
@@ -1680,7 +1718,7 @@
                 + '<a href="#rbfw_features_icon_list_wrapper" class="rbfw_feature_icon_btn btn" data-key="' + newKey + '"><i class="fas fa-circle-plus"></i> Icon</a>'
                 + '<div class="rbfw_feature_icon_preview" data-key="' + newKey + '"></div>'
                 + '<input type="hidden" name="rbfw_feature_category[' + dataCat + '][cat_features][' + newKey + '][icon]" data-key="' + newKey + '" class="rbfw_feature_icon" />'
-                + '<input type="text" name="rbfw_feature_category[' + dataCat + '][cat_features][' + newKey + '][title]" placeholder="Features Name" data-key="' + newKey + '" />'
+                + '<input type="text" name="rbfw_feature_category[' + dataCat + '][cat_features][' + newKey + '][title]" placeholder="' + (rbfwModernEditor_i18n('Features Name') || 'Features Name') + '" data-key="' + newKey + '" />'
                 + '<div><span class="button sort"><i class="fas fa-arrows-alt"></i></span>'
                 + '<span class="button remove" onclick="jQuery(this).parent().parent().remove()"><i class="fas fa-trash-can"></i></span></div>'
                 + '</div>';
@@ -1765,7 +1803,7 @@
 
         /* Delete */
         $wrap.on('click', '.rbfw-me-faq-delete', function () {
-            if (!confirm('Are you sure you want to delete this FAQ?')) return;
+            if (!confirm((rbfwModernEditor_i18n('Are you sure you want to delete this FAQ?') || 'Are you sure you want to delete this FAQ?'))) return;
             var id     = $(this).closest('.rbfw-me-faq-item').data('id');
             var postId = $wrap.find('.rbfw-me-faq-post-id').val();
             $.post(ajaxUrl, {
@@ -1893,7 +1931,7 @@
 
         /* Delete */
         $wrap.on('click', '.rbfw-me-term-delete', function () {
-            if (!confirm('Are you sure you want to delete this term?')) return;
+            if (!confirm((rbfwModernEditor_i18n('Are you sure you want to delete this term?') || 'Are you sure you want to delete this term?'))) return;
             var id     = $(this).closest('.rbfw-me-faq-item').data('id');
             var postId = $wrap.find('.rbfw-me-term-post-id').val();
             $.post(ajaxUrl, {
@@ -2091,14 +2129,14 @@
             var $row = $(
                 '<div class="rbfw-me-offdate-row">' +
                     '<div class="rbfw-me-field">' +
-                        '<label class="rbfw-me-label">Start Date</label>' +
+                        '<label class="rbfw-me-label">' + (rbfwModernEditor_i18n('Start Date') || 'Start Date') + '</label>' +
                         '<input type="date" name="off_days_start[]" class="rbfw-me-input">' +
                     '</div>' +
                     '<div class="rbfw-me-field">' +
-                        '<label class="rbfw-me-label">End Date</label>' +
+                        '<label class="rbfw-me-label">' + (rbfwModernEditor_i18n('End Date') || 'End Date') + '</label>' +
                         '<input type="date" name="off_days_end[]" class="rbfw-me-input">' +
                     '</div>' +
-                    '<button type="button" class="rbfw-me-offdate-remove" title="Remove">' +
+                    '<button type="button" class="rbfw-me-offdate-remove" title="' + (rbfwModernEditor_i18n('Remove') || 'Remove') + '">' +
                         '<span class="dashicons dashicons-trash"></span>' +
                     '</button>' +
                 '</div>'
@@ -2175,7 +2213,9 @@
             // Inventory card (stock + variations): mirror the classic editor, which
             // hides inventory for resort / appointment. Single Day (bike_car_sd) now
             // supports item variations, so its inventory card stays visible.
-            var _invShow = (type !== 'resort' && type !== 'appointment');
+            // Multiple Items carries per-item stock in its own pricing table, so the
+            // card-level inventory does not apply to it.
+            var _invShow = (type !== 'resort' && type !== 'appointment' && type !== 'multiple_items');
             $pricing.find('.rbfw-me-inventory-card').toggleClass('rbfw-me-hidden', !_invShow);
 
             // Inventory sub-sections that only apply to specific rent types:
@@ -2529,7 +2569,7 @@
                     '<input type="hidden" name="rdfw_available_time[' + index + '][id]" value="' + index + '">' +
                     '<input type="hidden" name="rdfw_available_time[' + index + '][time]" value="' + time + '">' +
                     '<input type="hidden" name="rdfw_available_time[' + index + '][status]" value="enabled">' +
-                    '<div class="time-slot-remove" title="Remove time slot">×</div>' +
+                    '<div class="time-slot-remove" title="' + (rbfwModernEditor_i18n('Remove time slot') || 'Remove time slot') + '">×</div>' +
                     '</div>';
             }
 
@@ -2561,6 +2601,15 @@
             if (type === 'checkbox' && $(this).hasClass('rbfw-me-cat-checkbox')) return;
             if (type === 'checkbox') {
                 data[name] = this.checked ? $(this).val() : '';
+            } else if (type === 'radio') {
+                // A radio group shares one name; only the *selected* option may
+                // contribute its value. Without this guard the loop overwrites
+                // data[name] with every radio's value in DOM order, so the last
+                // option always won — e.g. the service_price_type radios always
+                // saved "day_wise" no matter which the user actually picked.
+                if (this.checked) {
+                    data[name] = $(this).val();
+                }
             } else if (name.slice(-2) === '[]') {
                 var baseName = name.slice(0, -2);
                 if (!Array.isArray(data[baseName])) data[baseName] = [];
