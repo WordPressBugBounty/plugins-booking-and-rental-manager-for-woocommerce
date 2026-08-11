@@ -1408,17 +1408,67 @@ function rbfw_url_exclude_search_engine() {
 		}
 	}
 	add_action( 'pre_get_posts', 'rbfw_search_query_exlude_hidden_wc_fix' );
+	/**
+	 * Keep the hidden backing products of rental items out of site search results.
+	 *
+	 * Two things used to make this fire far too widely and clobber other people's
+	 * queries:
+	 *
+	 * 1. `$query->is_search` is set by WP_Query::parse_query() whenever the `s`
+	 *    query var is merely *present* — `if ( isset( $this->query['s'] ) )` — not
+	 *    only when something was actually searched for. WooCommerce's Product
+	 *    Collection block always passes `'s' => $search` with an empty default
+	 *    (see QueryBuilder::get_final_frontend_query()), so every Product
+	 *    Collection block on the front end looked like a search query.
+	 * 2. `$query->set( 'tax_query', … )` *replaces* the whole tax query. Combined
+	 *    with (1), the `product_visibility`/`featured` clause that the "Featured
+	 *    Products" collection had just built was thrown away, so the block fell
+	 *    back to listing every product in its "Order by" order — the reported bug.
+	 *    The same overwrite silently broke category, tag, attribute and stock
+	 *    filters on any other block or search query.
+	 *
+	 * So: require a real search term, and merge into whatever tax query is already
+	 * there instead of replacing it.
+	 *
+	 * @param WP_Query $query Query about to run.
+	 *
+	 * @return WP_Query
+	 */
 	function rbfw_search_query_exlude_hidden_wc_fix( $query ) {
-		if ( $query->is_search && ! is_admin() ) {
-			$query->set( 'tax_query', array(
-				array(
-					'taxonomy' => 'product_visibility',
-					'field'    => 'name',
-					'terms'    => 'exclude-from-search',
-					'operator' => 'NOT IN',
-				)
-			) );
+		if ( is_admin() || ! ( $query instanceof WP_Query ) || ! $query->is_search ) {
+			return $query;
 		}
+
+		// An empty `s` is not a search — see (1) above.
+		if ( '' === trim( (string) $query->get( 's' ) ) ) {
+			return $query;
+		}
+
+		$hidden_clause = array(
+			'taxonomy' => 'product_visibility',
+			'field'    => 'name',
+			'terms'    => 'exclude-from-search',
+			'operator' => 'NOT IN',
+		);
+
+		$existing = $query->get( 'tax_query' );
+
+		if ( is_array( $existing ) && ! empty( $existing ) ) {
+			/*
+			 * Nest rather than append: the existing query may carry its own
+			 * 'relation' => 'OR', and appending a clause to that would widen it into
+			 * "OR not-hidden" instead of narrowing it.
+			 */
+			$tax_query = array(
+				'relation' => 'AND',
+				$existing,
+				array( $hidden_clause ),
+			);
+		} else {
+			$tax_query = array( $hidden_clause );
+		}
+
+		$query->set( 'tax_query', $tax_query );
 
 		return $query;
 	}
@@ -3171,7 +3221,23 @@ add_action( 'woocommerce_thankyou', 'rbfw_update_order_status' );add_action( 'wo
 				// Copy meta fields.
 				$post_meta = get_post_custom( $post_id );
 				if ( $post_meta ) {
+					/*
+					 * Meta binding the source to its OWN backing WooCommerce product must not
+					 * be copied. `link_wc_product` would make the copy share the original's
+					 * product — so a booking on the copy was recorded against the original,
+					 * and deleting that one product broke every item cloned from it — while
+					 * `check_if_run_once` marked the copy as already-provisioned, so it could
+					 * never mint a product of its own. The copy is created as a draft and gets
+					 * its own product from RBFW_Hidden_Product when it is first published.
+					 */
+					$rbfw_skip_meta = class_exists( 'RBFW_Hidden_Product' )
+						? RBFW_Hidden_Product::$own_product_meta
+						: array( 'link_wc_product', 'check_if_run_once' );
+
 					foreach ( $post_meta as $meta_key => $meta_values ) {
+						if ( in_array( $meta_key, $rbfw_skip_meta, true ) ) {
+							continue;
+						}
 						update_post_meta( $new_post_id, $meta_key, maybe_unserialize( $meta_values[0] ) );
 					}
 					update_post_meta( $new_post_id, 'rbfw_inventory', '' );
@@ -3393,6 +3459,114 @@ add_action( 'woocommerce_thankyou', 'rbfw_update_order_status' );add_action( 'wo
 		return wp_json_encode( $off_dates );
 	}
 
+if ( ! function_exists( 'rbfw_is_off_day' ) ) {
+	/**
+	 * Is the given date an Off Day for this rental item?
+	 *
+	 * Mirrors the rule the datepicker already applies in `rbfw_off_day_dates()`
+	 * (assets/mp_script/rbfw_script.js): a date is off when its weekday is listed
+	 * in the item's weekly Off Days, or when the date itself falls inside one of
+	 * the configured Off Day ranges. Keeping the two in step is the point — server
+	 * side badges that disagree with the calendar are what made the
+	 * "Available Today" badge claim a day the calendar had greyed out.
+	 *
+	 * @param int         $post_id rbfw_item id.
+	 * @param string|null $date    Any date DateTimeImmutable can parse, or null for
+	 *                             today in the site's timezone.
+	 *
+	 * @return bool True when the date is an Off Day.
+	 */
+	function rbfw_is_off_day( $post_id, $date = null ) {
+		$post_id = (int) $post_id;
+		if ( $post_id < 1 ) {
+			return false;
+		}
+
+		try {
+			$moment = ( null === $date )
+				? new DateTimeImmutable( 'now', wp_timezone() )
+				: new DateTimeImmutable( $date, wp_timezone() );
+		} catch ( Exception $e ) {
+			return false; // Unparseable date: never claim it is an Off Day.
+		}
+
+		/*
+		 * format('l') and not wp_date('l'): the weekday names stored in
+		 * `rbfw_off_days` are lowercase English ("sunday"), matching the hardcoded
+		 * array the datepicker compares against. wp_date() returns the *translated*
+		 * name, which on a non-English site could never match.
+		 */
+		$weekday  = strtolower( $moment->format( 'l' ) );
+		$off_days = json_decode( (string) rbfw_off_days( $post_id ), true );
+		if ( is_array( $off_days ) ) {
+			foreach ( $off_days as $off_day ) {
+				if ( is_string( $off_day ) && $weekday === strtolower( trim( $off_day ) ) ) {
+					return true;
+				}
+			}
+		}
+
+		$off_dates = json_decode( (string) rbfw_off_dates( $post_id ), true );
+		if ( is_array( $off_dates ) && in_array( $moment->format( 'd-m-Y' ), $off_dates, true ) ) {
+			return true;
+		}
+
+		return false;
+	}
+}
+
+if ( ! function_exists( 'rbfw_format_duration_unit' ) ) {
+	/**
+	 * Format one "<count> <unit>" chunk of a human-readable rental duration.
+	 *
+	 * The duration summary used to be assembled by string concatenation —
+	 * `"$days day" . ( $days > 1 ? 's' : '' )` — which hard-coded English plural
+	 * rules and, because the text never passed through a translation function, was
+	 * invisible to Loco Translate and to `wp-cli i18n make-pot`. Languages with
+	 * more than two plural forms (Lithuanian, Polish, Russian, …) could not
+	 * translate it at all.
+	 *
+	 * Going through _n() puts the singular/plural pair in the POT file and lets
+	 * each locale apply its own plural rules.
+	 *
+	 * @param string    $unit  Unit key: 'month', 'week', 'day' or 'hour'.
+	 * @param int|float $count Number of units.
+	 *
+	 * @return string Localised "2 days" style string, or '' for an unknown unit.
+	 */
+	function rbfw_format_duration_unit( $unit, $count ) {
+		$count = is_numeric( $count ) ? $count + 0 : 0;
+
+		/*
+		 * _n() selects the plural form from a whole number, but the displayed value
+		 * must keep any fraction — every current caller passes an integer, yet
+		 * truncating a "2.5 hours" duration down to "2 hours" would silently
+		 * misreport what the customer is being charged for.
+		 */
+		$number = ( is_float( $count ) && 0.0 !== fmod( $count, 1 ) )
+			? number_format_i18n( $count, 2 )
+			: number_format_i18n( (int) $count );
+
+		$count = (int) $count;
+
+		switch ( $unit ) {
+			case 'month':
+				/* translators: %s: number of months. */
+				return sprintf( _n( '%s month', '%s months', $count, 'booking-and-rental-manager-for-woocommerce' ), $number );
+			case 'week':
+				/* translators: %s: number of weeks. */
+				return sprintf( _n( '%s week', '%s weeks', $count, 'booking-and-rental-manager-for-woocommerce' ), $number );
+			case 'day':
+				/* translators: %s: number of days. */
+				return sprintf( _n( '%s day', '%s days', $count, 'booking-and-rental-manager-for-woocommerce' ), $number );
+			case 'hour':
+				/* translators: %s: number of hours. */
+				return sprintf( _n( '%s hour', '%s hours', $count, 'booking-and-rental-manager-for-woocommerce' ), $number );
+		}
+
+		return '';
+	}
+}
 
 function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, $dropoff_datetime = 0, $start_date = '', $end_date = '', $star_time = '', $end_time = '', $rbfw_enable_time_slot = '') {
     global $rbfw;
@@ -3513,10 +3687,10 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
         }
 
 
-        if ($totalMonths > 0)       $output[] = "$totalMonths month" . ($totalMonths > 1 ? 's' : '');
-        if ($weeks > 0)       $output[] = "$weeks week" . ($weeks > 1 ? 's' : '');
-        if ($days > 0)        $output[] = "$days day" . ($days > 1 ? 's' : '');
-        if ($hours > 0)       $output[] = "$hours hour" . ($hours > 1 ? 's' : '');
+        if ($totalMonths > 0)       $output[] = rbfw_format_duration_unit( 'month', $totalMonths );
+        if ($weeks > 0)       $output[] = rbfw_format_duration_unit( 'week', $weeks );
+        if ($days > 0)        $output[] = rbfw_format_duration_unit( 'day', $days );
+        if ($hours > 0)       $output[] = rbfw_format_duration_unit( 'hour', $hours );
 
 
         return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>get_transient("pricing_applied")];
@@ -3563,9 +3737,9 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
             }
         }
 
-        if ($actualWeeks > 0)        $output[] = "$actualWeeks week" . ($actualWeeks > 1 ? 's' : '');
-        if ($daysWeeks > 0)        $output[] = "$daysWeeks day" . ($daysWeeks > 1 ? 's' : '');
-        if ($hours > 0)       $output[] = "$hours hour" . ($hours > 1 ? 's' : '');
+        if ($actualWeeks > 0)        $output[] = rbfw_format_duration_unit( 'week', $actualWeeks );
+        if ($daysWeeks > 0)        $output[] = rbfw_format_duration_unit( 'day', $daysWeeks );
+        if ($hours > 0)       $output[] = rbfw_format_duration_unit( 'hour', $hours );
 
         return ['duration_price' => $duration_price, 'duration' => implode(" ", $output), 'total_days'=>$total_days?$total_days:1, 'pricing_applied'=>get_transient("pricing_applied")];
     }
@@ -4022,6 +4196,283 @@ function check_seasonal_price_sd( $Book_date, $rbfw_sp_prices, $rent_type = '0' 
 
 
 
+/**
+ * The tax WooCommerce will apply to a rental, resolved for display in the booking summary.
+ *
+ * The item's own _tax_status / _tax_class are the source of truth (both editors write them,
+ * and RBFW_Hidden_Product mirrors them onto the backing product WooCommerce charges against).
+ * Rates come from the shop's BASE location: the customer's address is not known before
+ * checkout, which is the same estimate WooCommerce itself uses for catalog prices.
+ *
+ * `included` reflects woocommerce_prices_include_tax, and decides whether the summary adds
+ * the tax on top of the total or merely breaks out the portion already inside it — get that
+ * wrong and the item page disagrees with the checkout.
+ *
+ * @param int $item_id Rental item id.
+ * @return array{taxable:bool,rate:float,label:string,included:bool}
+ */
+function rbfw_item_tax_info( $item_id ) {
+	$none = array( 'taxable' => false, 'rate' => 0.0, 'label' => '', 'included' => false );
+
+	$item_id = absint( $item_id );
+	if ( ! $item_id || ! class_exists( 'WC_Tax' ) || 'yes' !== get_option( 'woocommerce_calc_taxes' ) ) {
+		return $none;
+	}
+	if ( 'taxable' !== get_post_meta( $item_id, '_tax_status', true ) ) {
+		return $none;
+	}
+	if ( 'no' === get_post_meta( $item_id, 'rbfw_enable_tax_settings', true ) ) {
+		return $none;
+	}
+
+	// WooCommerce's Standard class is the empty string; the rental tax tab offers "standard".
+	$tax_class = (string) get_post_meta( $item_id, '_tax_class', true );
+	if ( 'standard' === $tax_class ) {
+		$tax_class = '';
+	}
+
+	$rates = WC_Tax::get_rates( $tax_class );
+	if ( empty( $rates ) ) {
+		return $none;
+	}
+
+	$rate  = 0.0;
+	$label = '';
+	foreach ( $rates as $row ) {
+		$rate += isset( $row['rate'] ) ? (float) $row['rate'] : 0.0;
+		if ( '' === $label && ! empty( $row['label'] ) ) {
+			$label = (string) $row['label'];
+		}
+	}
+	if ( $rate <= 0 ) {
+		return $none;
+	}
+
+	return array(
+		'taxable'  => true,
+		'rate'     => $rate,
+		'label'    => '' !== $label ? $label : __( 'Tax', 'booking-and-rental-manager-for-woocommerce' ),
+		'included' => wc_prices_include_tax(),
+	);
+}
+
+/**
+ * Hidden inputs + the summary row the booking scripts read to show tax.
+ *
+ * Printed by each registration template inside its own form, so every booking type shares
+ * one definition of what "tax" means on the item page.
+ *
+ * @param int $item_id Rental item id.
+ * @return void
+ */
+function rbfw_tax_summary_row( $item_id ) {
+	$tax = rbfw_item_tax_info( $item_id );
+	if ( ! $tax['taxable'] ) {
+		return;
+	}
+	?>
+	<input type="hidden" id="rbfw_tax_rate" value="<?php echo esc_attr( $tax['rate'] ); ?>">
+	<input type="hidden" id="rbfw_tax_included" value="<?php echo $tax['included'] ? 'yes' : 'no'; ?>">
+	<li class="tax-costing rbfw-cond" style="display:none;">
+		<?php
+		echo esc_html(
+			$tax['included']
+				/* translators: 1: tax label, 2: rate percentage */
+				? sprintf( __( '%1$s (incl. %2$s%%)', 'booking-and-rental-manager-for-woocommerce' ), $tax['label'], rbfw_trim_zeros_number( $tax['rate'] ) )
+				/* translators: 1: tax label, 2: rate percentage */
+				: sprintf( __( '%1$s (%2$s%%)', 'booking-and-rental-manager-for-woocommerce' ), $tax['label'], rbfw_trim_zeros_number( $tax['rate'] ) )
+		);
+		?>
+		<span class="price-figure" data-price="0"><?php echo wp_kses( wc_price( 0 ), rbfw_allowed_html() ); ?></span>
+	</li>
+	<?php
+}
+
+/**
+ * Serve the plugin's own listing on rent-type / location archives.
+ *
+ * These URLs had no template of their own, so WordPress fell back to the theme's blog archive
+ * — a full-width image, an excerpt and a post date per rental, with no price, no booking link
+ * and no grid/list control. Themes can still override by copying the file into
+ * yourtheme/templates/archive/rbfw-category.php (get_template_path() checks there first).
+ *
+ * @param string $template Template WordPress resolved.
+ * @return string
+ */
+function rbfw_category_archive_template( $template ) {
+	if ( ! is_tax( array( 'rbfw_item_caregory', 'rbfw_item_location' ) ) ) {
+		return $template;
+	}
+	if ( ! class_exists( 'RBFW_Function' ) ) {
+		return $template;
+	}
+
+	$custom = RBFW_Function::get_template_path( 'archive/rbfw-category.php' );
+
+	return ( $custom && file_exists( $custom ) ) ? $custom : $template;
+}
+add_filter( 'template_include', 'rbfw_category_archive_template', 99 );
+
+/**
+ * The rent types (categories) an item belongs to, as linked chips for the single page.
+ *
+ * Every category was visible in the admin editor and nowhere on the front end, so a visitor
+ * could not see what kind of rental they were looking at, nor jump to similar ones.
+ *
+ * Terms are the source of truth; the name-based `rbfw_categories` mirror is only used as a
+ * fallback for items imported without term relationships, with the name resolved back to a
+ * term so the chip still links somewhere useful.
+ *
+ * @param int  $item_id Rental item id.
+ * @param bool $echo    Print (default) or return the markup.
+ * @return string
+ */
+function rbfw_item_category_chips( $item_id = 0, $echo = true ) {
+	$item_id = $item_id ? absint( $item_id ) : get_the_ID();
+	$terms   = get_the_terms( $item_id, 'rbfw_item_caregory' );
+	$terms   = ( is_array( $terms ) && ! is_wp_error( $terms ) ) ? $terms : array();
+
+	if ( empty( $terms ) ) {
+		$names = get_post_meta( $item_id, 'rbfw_categories', true );
+		foreach ( (array) $names as $name ) {
+			$term = get_term_by( 'name', $name, 'rbfw_item_caregory' );
+			if ( $term && ! is_wp_error( $term ) ) {
+				$terms[] = $term;
+			}
+		}
+	}
+	if ( empty( $terms ) ) {
+		return '';
+	}
+
+	$out = '<div class="rbfw-item-categories">';
+	foreach ( $terms as $term ) {
+		$link = get_term_link( $term );
+		$out .= sprintf(
+			'<a class="rbfw-item-category" href="%s" rel="tag"><i class="fas fa-tag" aria-hidden="true"></i>%s</a>',
+			esc_url( is_wp_error( $link ) ? rbfw_item_category_url( $term->slug ) : $link ),
+			esc_html( $term->name )
+		);
+	}
+	$out .= '</div>';
+
+	if ( $echo ) {
+		echo wp_kses_post( $out );
+	}
+
+	return $out;
+}
+
+/**
+ * A category listing URL that works regardless of permalink settings.
+ *
+ * The taxonomy is public with a `rbfw_caregory` rewrite slug, but its rules are only present
+ * after a flush (see rbfw_maybe_flush_category_rewrites), so the query-var form is the
+ * dependable fallback.
+ *
+ * @param string $slug Category term slug.
+ * @return string
+ */
+function rbfw_item_category_url( $slug ) {
+	return add_query_arg( 'rbfw_item_caregory', sanitize_title( $slug ), home_url( '/' ) );
+}
+
+/**
+ * Register the category rewrite rules once.
+ *
+ * `/rbfw_caregory/<slug>/` returned 404 on existing sites: the taxonomy is registered with a
+ * rewrite slug, but nothing ever flushed the rules after it was added, so only the
+ * `?rbfw_item_caregory=<slug>` form resolved. Flushing is expensive, hence the version guard.
+ *
+ * @return void
+ */
+function rbfw_maybe_flush_category_rewrites() {
+	if ( get_option( 'rbfw_category_rewrite_version' ) === '1' ) {
+		return;
+	}
+	flush_rewrite_rules( false );
+	update_option( 'rbfw_category_rewrite_version', '1' );
+}
+add_action( 'admin_init', 'rbfw_maybe_flush_category_rewrites', 99 );
+
+/**
+ * Total tax on a WooCommerce order, read through the order API.
+ *
+ * This was `get_post_meta( $order_id, '_order_tax' )` everywhere, which returns NOTHING once
+ * High-Performance Order Storage is on (orders live in their own tables, not postmeta) — and
+ * HPOS is the default for new WooCommerce installs. That is why the booking record's
+ * rbfw_order_tax meta was never written, and why the PDF's tax row, the booking detail's Tax
+ * field and the e-mail totals were all blank however the rental was taxed. `_order_tax` also
+ * only ever held the line-item tax, never shipping tax.
+ *
+ * @param int $wc_order_id WooCommerce order id.
+ * @return float
+ */
+function rbfw_wc_order_tax_total( $wc_order_id ) {
+	$wc_order_id = absint( $wc_order_id );
+	if ( ! $wc_order_id || ! function_exists( 'wc_get_order' ) ) {
+		return 0.0;
+	}
+
+	$order = wc_get_order( $wc_order_id );
+	if ( $order instanceof WC_Order || $order instanceof WC_Abstract_Order ) {
+		return (float) $order->get_total_tax();
+	}
+
+	// Legacy fallback for a stored id whose order object can no longer be loaded.
+	$legacy = get_post_meta( $wc_order_id, '_order_tax', true );
+
+	return '' !== $legacy ? (float) $legacy : 0.0;
+}
+
+/**
+ * The tax note printed beside a booking's total on the thank-you page, in e-mails and in the
+ * booking detail — e.g. "(incl. ৳9.09 Tax)".
+ *
+ * Reads the figure recorded on the booking (rbfw_order_tax), so every document quotes the same
+ * amount the customer was actually charged rather than re-deriving it from live rates.
+ *
+ * Deliberately accepts EITHER id: the callers are split between the booking record (thank-you
+ * page, booking detail) and the linked WooCommerce order (Pro's e-mail and calendar popup read
+ * rbfw_link_order_id), and an id-specific helper would have silently returned nothing for half
+ * of them.
+ *
+ * @param int $id Booking record post id, or the linked WooCommerce order id.
+ * @return string Empty when there is no tax to report.
+ */
+function rbfw_booking_tax_note( $id ) {
+	$id  = absint( $id );
+	$tax = (float) get_post_meta( $id, 'rbfw_order_tax', true );
+
+	// Not a booking record (or not recorded yet) — ask WooCommerce directly.
+	if ( $tax <= 0 ) {
+		$tax = rbfw_wc_order_tax_total( $id );
+	}
+	if ( $tax <= 0 ) {
+		return '';
+	}
+
+	$label = __( 'Tax', 'booking-and-rental-manager-for-woocommerce' );
+	if ( function_exists( 'rbfw_get_option' ) ) {
+		$custom = rbfw_get_option( 'rbfw_text_order_tax', 'rbfw_basic_translation_settings' );
+		if ( ! empty( $custom ) ) {
+			$label = $custom;
+		}
+	}
+
+	/* translators: 1: tax amount, 2: tax label */
+	return sprintf(
+		__( '(incl. %1$s %2$s)', 'booking-and-rental-manager-for-woocommerce' ),
+		class_exists( 'RBFW_Coupon_Engine' ) ? RBFW_Coupon_Engine::price_text( $tax ) : wp_strip_all_tags( wc_price( $tax ) ),
+		$label
+	);
+}
+
+/** 10.0000 -> "10", 8.5000 -> "8.5". Keeps the tax label readable. */
+function rbfw_trim_zeros_number( $number ) {
+	return rtrim( rtrim( number_format( (float) $number, 4, '.', '' ), '0' ), '.' );
+}
+
 function rbfw_security_deposit( $post_id, $sub_total_price ) {
 		$security_deposit_amount      = 0;
 		$security_deposit_desc        = 0;
@@ -4040,6 +4491,114 @@ function rbfw_security_deposit( $post_id, $sub_total_price ) {
 
 		return array( 'security_deposit_amount' => $security_deposit_amount, 'security_deposit_desc' => $security_deposit_desc );
     }
+
+	/****************************************************
+	 * Booking statuses
+	 *
+	 * A rental has two independent lifecycles: the money (a WooCommerce order)
+	 * and the physical item (out with the customer, or back on the rack).
+	 * WooCommerce can only express the first, so the plugin stores the second on
+	 * the booking itself as rbfw_order_status. The helpers below are the single
+	 * source of truth for that combined status set, so every screen that offers
+	 * or renders a booking status stays consistent.
+	 ****************************************************/
+
+	/**
+	 * Booking statuses that exist only inside the plugin.
+	 *
+	 * Picked and Returned are deliberately NOT registered as WooCommerce order
+	 * statuses — they describe where the goods are, not what was paid. Any screen
+	 * that builds a status list from wc_get_order_statuses() alone will therefore
+	 * omit them and leave the rental half of the workflow unreachable.
+	 *
+	 * @return array<string,string> Status slug => translated label.
+	 */
+	function rbfw_get_rental_only_statuses() {
+		return apply_filters(
+			'rbfw_rental_only_statuses',
+			array(
+				'picked'   => esc_html__( 'Picked', 'booking-and-rental-manager-for-woocommerce' ),
+				'returned' => esc_html__( 'Returned', 'booking-and-rental-manager-for-woocommerce' ),
+			)
+		);
+	}
+
+	/**
+	 * Every status an admin may assign to a booking: WooCommerce's own plus the
+	 * rental-only ones.
+	 *
+	 * @return array<string,string> Slug (no wc- prefix) => translated label.
+	 */
+	function rbfw_get_booking_status_choices() {
+		$choices = array();
+		if ( function_exists( 'wc_get_order_statuses' ) ) {
+			foreach ( wc_get_order_statuses() as $key => $label ) {
+				$choices[ str_replace( 'wc-', '', $key ) ] = $label;
+			}
+		}
+
+		return array_merge( $choices, rbfw_get_rental_only_statuses() );
+	}
+
+	/**
+	 * The WooCommerce order status a booking status maps onto.
+	 *
+	 * A rental-only status still sits on top of a real order: the goods being out
+	 * means the order is Processing, and a completed rental means Completed. Both
+	 * the booking detail screen and the Order List use this so either entry point
+	 * moves the WooCommerce order the same way.
+	 *
+	 * @param string $status Booking status slug.
+	 * @return string WooCommerce status slug (no wc- prefix).
+	 */
+	function rbfw_map_booking_status_to_wc( $status ) {
+		$map = apply_filters(
+			'rbfw_booking_status_wc_map',
+			array(
+				'picked'   => 'processing',
+				'returned' => 'completed',
+			)
+		);
+
+		return isset( $map[ $status ] ) ? $map[ $status ] : $status;
+	}
+
+	/**
+	 * Human-readable label for a booking status, with a prettified-slug fallback
+	 * so an unknown or legacy value still renders sensibly.
+	 *
+	 * @param string $status Booking status slug.
+	 * @return string
+	 */
+	function rbfw_get_booking_status_label( $status ) {
+		$choices = rbfw_get_booking_status_choices();
+
+		return isset( $choices[ $status ] ) ? $choices[ $status ] : ucfirst( str_replace( '-', ' ', (string) $status ) );
+	}
+
+	/**
+	 * The status to display for a booking row.
+	 *
+	 * The WooCommerce order stays authoritative for payment state, but it cannot
+	 * represent Picked/Returned — a returned booking rides on a Completed order,
+	 * making it indistinguishable from one that never came back. When the booking
+	 * carries a rental-only status that is the more specific truth, so it wins;
+	 * otherwise the WooCommerce status is shown unchanged.
+	 *
+	 * @param int    $booking_id rbfw_order post id.
+	 * @param string $wc_status  Status of the linked WooCommerce order.
+	 * @return string
+	 */
+	function rbfw_get_booking_display_status( $booking_id, $wc_status = '' ) {
+		$booking_status = get_post_meta( $booking_id, 'rbfw_order_status', true );
+
+		if ( $booking_status && array_key_exists( $booking_status, rbfw_get_rental_only_statuses() ) ) {
+			return $booking_status;
+		}
+
+		return $wc_status;
+	}
+
 	/**
 	 * Get unique categories from post meta with key 'rbfw_categories' using WP_Query.
 	 *

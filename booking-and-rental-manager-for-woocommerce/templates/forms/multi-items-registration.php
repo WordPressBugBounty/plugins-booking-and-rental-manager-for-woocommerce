@@ -164,7 +164,7 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
     <div class="rbfw-single-right-container">
 
         <div class="rbfw-sd-rate-box">
-            <?php rbfw_fd_summary_badges(); ?>
+            <?php rbfw_fd_summary_badges( $rbfw_id ); ?>
             <?php rbfw_fd_summary_title(); ?>
             <?php rbfw_fd_summary_desc(); ?>
             <?php if ( $_rbfw_mi_min_price > 0 ) : ?>
@@ -417,6 +417,13 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
 
                     <?php include RBFW_TEMPLATE_PATH . 'forms/location-cards.php'; ?>
 
+                    <?php
+                    /* Delivery & Collection — after the date/duration step, so the customer
+                       picks WHEN first and then how they get the item. Renders nothing unless
+                       the shop offers delivery and this item allows it. */
+                    include RBFW_Function::get_template_path( 'forms/delivery-collection.php' );
+                    ?>
+
                     <?php  if(!empty($multiple_items_info)){ ?>
 
                         <div class="item rbfw_resourse_md" style="display: none">
@@ -647,6 +654,9 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
                                     <?php esc_html_e('Subtotal','booking-and-rental-manager-for-woocommerce'); ?>
                                     <span class="price-figure" data-price=""><?php echo wp_kses( wc_price(0), rbfw_allowed_html() ); ?></span>
                                 </li>
+
+                                <?php // Tax the item is configured for, shown as WooCommerce will charge it. ?>
+                                <?php rbfw_tax_summary_row( $post_id ); ?>
 
                                 <?php if($fee_management_cost_enable){ ?>
                                     <li class="management-costing rbfw-cond">

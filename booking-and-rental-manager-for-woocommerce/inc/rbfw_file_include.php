@@ -22,10 +22,21 @@ require_once RBFW_PLUGIN_DIR . '/inc/rbfw_functions.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_frontend_display.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_resort_functions.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_fee_functions.php';
+// Delivery & Collection mileage pricing — emits into the same fee bucket as rbfw_fee_functions,
+// so it must load alongside it and before any pricing path runs.
+require_once RBFW_PLUGIN_DIR . '/inc/rbfw_delivery_functions.php';
+// Accounting payment methods (card / cheque / cash / bank transfer).
+require_once RBFW_PLUGIN_DIR . '/inc/rbfw_payment_methods.php';
+// Settings screens for the two engines above — loaded after them, since they register
+// against constants and helpers those files define.
+if ( is_admin() ) {
+	require_once RBFW_PLUGIN_DIR . '/admin/settings/RBFW_Delivery_Settings.php';
+}
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_inventory_functions.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_dynamic_css.php';
 require_once RBFW_PLUGIN_DIR . '/inc/class-resort-function.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_shortcodes.php';
+require_once RBFW_PLUGIN_DIR . '/inc/rbfw_item_search.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_booking_search.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-pro-page.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-welcome-page.php';

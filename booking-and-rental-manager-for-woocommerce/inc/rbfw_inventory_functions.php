@@ -13,7 +13,9 @@ function rbfw_add_order_meta_data($meta_data = array(), $ticket_info = array()) 
 
         $wc_order_id = intval($meta_data['rbfw_order_id']);
         $ticket_info = $meta_data['rbfw_ticket_info'];
-        $order_tax = !empty(get_post_meta($wc_order_id, '_order_tax', true)) ? get_post_meta($wc_order_id, '_order_tax', true) : 0;
+        // Order API, not postmeta: under HPOS the order is not in postmeta at all, so the
+        // old _order_tax read returned nothing and no booking ever recorded its tax.
+        $order_tax = rbfw_wc_order_tax_total($wc_order_id);
         $total_cost = get_post_meta($wc_order_id, '_order_total', true);
         $rbfw_link_order_id = get_post_meta($wc_order_id, '_rbfw_link_order_id', true);
         $rbfw_pin = get_post_meta($rbfw_link_order_id, 'rbfw_pin', true);
@@ -52,9 +54,9 @@ function rbfw_add_order_meta_data($meta_data = array(), $ticket_info = array()) 
 
         update_post_meta($post_id, 'rbfw_pin', $rbfw_pin);
 
-        if(!empty($order_tax)){
-            update_post_meta($post_id, 'rbfw_order_tax', $order_tax);
-        }
+        // Written unconditionally: guarding on non-empty left a stale figure behind when an
+        // order's tax was later removed.
+        update_post_meta($post_id, 'rbfw_order_tax', $order_tax);
 
         update_post_meta($post_id, 'rbfw_ticket_total_price', $total_cost);
         update_post_meta($post_id, 'rbfw_link_order_id', $wc_order_id);
@@ -336,7 +338,12 @@ function rbfw_get_multiple_date_available_qty($post_id, $start_date, $end_date, 
                         if ($stock_manage_on_return_date == 'no') {
                             $date = new DateTime($inventory_end_date);
                             $date->modify('-1 day');
-                            $inventory_end_date = $date->format('Y-m-d');
+                            $adjusted_end_date = $date->format('Y-m-d');
+                            /* Freeing the return date must never push the end before the
+                               start: on a same-day booking (start === end) that produces an
+                               inverted range which overlaps nothing, so the unit reads as
+                               free on the very day it is rented out. Clamp to the start. */
+                            $inventory_end_date = ($adjusted_end_date < $inventory_start_date) ? $inventory_start_date : $adjusted_end_date;
                         }
                     }
 
@@ -435,7 +442,13 @@ function rbfw_get_multiple_date_available_qty($post_id, $start_date, $end_date, 
                 }
             }
         }
-        $remaining_stock = max($variant_instock);
+        /* Headline figure for the whole requested range is the best-stocked size; per-size
+           limits are enforced at add-to-cart by rbfw_check_rental_availability(). Guarded
+           because max() throws on an empty array in PHP 8 — reachable when variations are
+           enabled but every configured row is missing its label, values or quantity. */
+        if ( ! empty( $variant_instock ) ) {
+            $remaining_stock = max($variant_instock);
+        }
     }
 
     /*end variation inventory*/
@@ -655,8 +668,11 @@ function rbfw_day_wise_sold_out_check_by_month($post_id, $year,  $month, $total_
                     if ( (in_array($checkValues, $inventory_managed_order_status) || $inventory['rbfw_order_status'] == 'picked' || ($inventory_based_on_return == 'yes' && $inventory['rbfw_order_status'] == 'returned')) && $partial_stock) {
 
 
-                        $booked_dates = $inventory['booked_dates'];
-                        if($stock_manage_on_return_date=='no'){
+                        $booked_dates = is_array($inventory['booked_dates']) ? $inventory['booked_dates'] : [];
+                        /* Dropping the return date must never empty the list: a same-day
+                           booking holds exactly one date, and popping it would leave the
+                           unit showing as available on the day it is actually rented out. */
+                        if($stock_manage_on_return_date=='no' && count($booked_dates) > 1){
                             array_pop($booked_dates);
                         }
                         if (in_array($date,$booked_dates)) {
@@ -682,24 +698,29 @@ function rbfw_day_wise_sold_out_check_by_month($post_id, $year,  $month, $total_
         $variant_instock = [];
 
         if(($rbfw_enable_variations=='yes') && !empty($rbfw_variations_data)){
-            $variant_q = [];
             foreach($rbfw_variations_data as $key=>$item1){
                 $field_label = isset($item1['field_label']) ? $item1['field_label'] : '';
                 if($field_label && !empty($item1['value']) && is_array($item1['value'])){
                     foreach ($item1['value'] as $key1=>$single){
-                        if(!empty($single['name'])){
-                            foreach($date_range as $date1){
-                                $variant_q[] = array('date'=>$date1,$single['name']=>total_variant_quantity($field_label,$single['name'],$date,$rbfw_inventory,$inventory_based_on_return));
-                            }
-                            $booked_quantity = array_column($variant_q, $single['name']);
-                            $variant_instock[] = $single['quantity'] - max($booked_quantity);
+                        if(!empty($single['name']) && isset($single['quantity'])){
+                            /* This function already runs once per $date, so the booked count is
+                               for that single day. The previous code looped the whole date range
+                               here while still passing $date, recomputing one identical value
+                               once per day in the range before taking its max() — same result,
+                               O(days) wasted work per size per day. */
+                            $booked = total_variant_quantity($field_label,$single['name'],$date,$rbfw_inventory,$inventory_based_on_return);
+                            $variant_instock[] = $single['quantity'] - $booked;
                         }
                     }
                 }
             }
-            $remaining_stock = max($variant_instock);
-
-
+            /* A date counts as sold out only when EVERY size is gone, so the day's headline
+               figure is the best-stocked size. Per-size limits are enforced at add-to-cart by
+               rbfw_check_rental_availability(); this value only drives calendar display.
+               Guarded because max() throws on an empty array in PHP 8. */
+            if ( ! empty( $variant_instock ) ) {
+                $remaining_stock = max($variant_instock);
+            }
         }
 
         $day_wise_inventory[$date] = $remaining_stock;
@@ -2988,7 +3009,12 @@ function rbfw_count_overlapping_booked_qty( $post_id, $req_start_datetime, $req_
 			try {
 				$dt = new DateTime( $inv_end_date );
 				$dt->modify( '-1 day' );
-				$inv_end_date = $dt->format( 'Y-m-d' );
+				$adjusted_end = $dt->format( 'Y-m-d' );
+				/* Never let the freed return date move the end before the start.
+				   A same-day booking (start === end) would otherwise become an
+				   inverted range that overlaps nothing, so the already-booked unit
+				   passes this gate and gets double-booked. */
+				$inv_end_date = ( $adjusted_end < $inv_start_date ) ? $inv_start_date : $adjusted_end;
 			} catch ( Exception $e ) {
 				continue;
 			}

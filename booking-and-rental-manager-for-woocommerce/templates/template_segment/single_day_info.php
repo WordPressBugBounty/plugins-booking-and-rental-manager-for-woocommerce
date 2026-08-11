@@ -293,11 +293,11 @@ if(isset($_POST['post_id'])){
                             foreach ($rbfw_extra_service_data as $value) {
                                 $img_url = !empty($value['service_img']) ? wp_get_attachment_url($value['service_img']) : '';
                                 $uniq_id = wp_rand();
+                                $img = '';
                                 if ($img_url) {
-                                    $img = '<a href="#rbfw_service_img_'.$uniq_id.'" rel="mage_modal:open"><img src="' . esc_url($img_url) . '"/></a>';
-                                    $img .= '<div id="rbfw_service_img_' . $uniq_id . '" class="mage_modal"><img src="<?php echo esc_url($img_url) ?>"/></div>';
-                                }else{
-                                    $img = '';
+                                    $img  = '<a href="#rbfw_service_img_'.$uniq_id.'" rel="mage_modal:open"><img src="' . esc_url($img_url) . '"/></a>';
+                                    // Concatenated: the literal PHP tag left the popup image with no src.
+                                    $img .= '<div id="rbfw_service_img_' . $uniq_id . '" class="mage_modal"><img src="' . esc_url($img_url) . '"/></div>';
                                 }
 
                                 $max_es_available_qty = rbfw_get_bike_car_sd_es_available_qty($id, $selected_date, $value['service_name']);
@@ -305,10 +305,18 @@ if(isset($_POST['post_id'])){
                                 if(isset($value['service_qty']) && ($value['service_qty'] > 0)){
                                     ?>
                                     <tr>
-                                        <td class="w_50_pc">
-                                            <div>
-                                                <?php echo wp_kses($img,rbfw_allowed_html()); ?>
-                                            </div>
+                                        <?php
+                                        // rbfw-es-has-img drives the round select/check marker in
+                                        // assets/mp_style/mp_style.css. Services with no image show neither the
+                                        // image nor that marker — the row's own highlight already says "selected".
+                                        ?>
+                                        <td class="w_50_pc<?php echo $img ? ' rbfw-es-has-img' : ''; ?>">
+                                            <?php // Only render the image cell content when there actually is an image. ?>
+                                            <?php if ($img) { ?>
+                                                <div>
+                                                    <?php echo wp_kses($img,rbfw_allowed_html()); ?>
+                                                </div>
+                                            <?php } ?>
                                             <div>
                                                 <span class="rbfw_bikecarsd_type_title"><?php echo esc_html($value['service_name']); ?></span>
                                                 <?php if(!empty($value['service_desc'])){ ?>
@@ -437,6 +445,19 @@ if(isset($_POST['post_id'])){
 
 
 
+            <?php
+            /* Delivery & Collection.
+             *
+             * This panel is what the customer sees AFTER choosing a date and duration, which
+             * is exactly where the delivery question belongs — and it is rendered over AJAX,
+             * which is why placing the block in the static booking form never showed it on
+             * items using this step flow.
+             *
+             * $id is the rental item in this segment's scope. */
+            $rbfw_id = isset( $id ) ? $id : ( isset( $rbfw_id ) ? $rbfw_id : 0 );
+            include RBFW_Function::get_template_path( 'forms/delivery-collection.php' );
+            ?>
+
             <div class="item rbfw_bikecarsd_price_summary">
                 <div class="item-content rbfw-costing">
                     <ul class="rbfw-ul">
@@ -445,8 +466,28 @@ if(isset($_POST['post_id'])){
                             <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
                         </li>
 
+                        <?php
+                        /* Delivery and collection are billed as two separate legs and can be
+                           priced by different band tables, so they get a line each. Merging
+                           them hid the fact that a return leg on its own bands can cost a
+                           very different amount from the outbound one. Both start hidden;
+                           the delivery script reveals and fills whichever apply. */
+                        if ( function_exists( 'rbfw_delivery_enabled_for_item' ) && rbfw_delivery_enabled_for_item( $rbfw_id ) ) :
+                            $rbfw_delivery_labels = rbfw_delivery_settings();
+                            ?>
+                            <li class="rbfw-delivery-costing" style="display:none;">
+                                <?php echo esc_html( $rbfw_delivery_labels['delivery_label'] ); ?>
+                                <span class="rbfw-delivery-cost-value"><?php echo wp_kses( wc_price( 0 ), rbfw_allowed_html() ); ?></span>
+                            </li>
+                            <li class="rbfw-collection-costing" style="display:none;">
+                                <?php echo esc_html( $rbfw_delivery_labels['collection_label'] ); ?>
+                                <span class="rbfw-collection-cost-value"><?php echo wp_kses( wc_price( 0 ), rbfw_allowed_html() ); ?></span>
+                            </li>
+                        <?php endif; ?>
+
                         <?php if(!empty($rbfw_extra_service_data)){ ?>
-                            <li class="extra_service_cost rbfw-cond" style="display: none">
+                            <?php // Carries both class names: different scripts target this row by each of them. ?>
+                            <li class="resource-costing extra_service_cost rbfw-cond" style="display: none">
                                 <?php echo esc_html__( 'Resource Cost','booking-and-rental-manager-for-woocommerce' ); ?>
                                 <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
                             </li>
@@ -461,6 +502,9 @@ if(isset($_POST['post_id'])){
                             <?php echo esc_html__( 'Subtotal','booking-and-rental-manager-for-woocommerce' ); ?>
                             <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
                         </li>
+
+                        <?php // Tax the item is configured for, as WooCommerce will charge it. ?>
+                        <?php rbfw_tax_summary_row( $id ); ?>
 
                         <?php if($fee_management_cost_enable){ ?>
                             <li class="management-costing rbfw-cond">

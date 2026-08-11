@@ -78,7 +78,6 @@
                     </div>
                 <?php endif; ?>
 
-
                 <?php
                 // --- Flexible Rate box ---
                 $_rbfw_sd_raw   = get_post_meta( $rbfw_id, 'rbfw_bike_car_sd_data', true );
@@ -95,7 +94,7 @@
                 }
                 ?>
                 <div class="rbfw-sd-rate-box">
-                    <?php rbfw_fd_summary_badges(); ?>
+                    <?php rbfw_fd_summary_badges( $rbfw_id ); ?>
                     <?php rbfw_fd_summary_title(); ?>
                     <?php rbfw_fd_summary_desc(); ?>
                     <?php if ( $_rbfw_start > 0 ) : ?>
@@ -271,6 +270,13 @@
                         </div>
                     </div>
 
+                    <?php
+                    /* Delivery & Collection — placed AFTER the date/duration step on purpose:
+                       the customer picks WHEN first, then how they get the bike. Renders
+                       nothing unless the shop offers delivery and this item allows it. */
+                    include RBFW_Function::get_template_path( 'forms/delivery-collection.php' );
+                    ?>
+
                     <input type="hidden" name="service_type" id="rbfw_service_type_for_st" value="">
 
                     <div class="rbfw_bikecarsd_pricing_table_container rbfw-bikecarsd-step rbfw_extra_service_sd" style="display: none">
@@ -286,19 +292,24 @@
                                         // Available qty defaults to the configured stock (no date is selected at
                                         // initial render); avoids an undefined-variable warning in the notice below.
                                         $max_es_available_qty = isset($value['service_qty']) ? $value['service_qty'] : 0;
+                                        $img = '';
                                         if ($img_url) {
-                                            $img = '<a href="#rbfw_service_img_<?php echo $uniq_id ?>" rel="mage_modal:open"><img src="' . esc_url($img_url) . '"/></a>';
-                                            $img .= '<div id="rbfw_service_img_' . $uniq_id . '" class="mage_modal"><img src="<?php echo esc_url($img_url) ?>"/></div>';
-                                        }else{
-                                            $img = '';
+                                            // Concatenate the values in: a literal PHP tag inside the
+                                            // single-quoted string was output verbatim, which broke both the
+                                            // lightbox anchor and the popup image source.
+                                            $img  = '<a href="#rbfw_service_img_' . $uniq_id . '" rel="mage_modal:open"><img src="' . esc_url($img_url) . '"/></a>';
+                                            $img .= '<div id="rbfw_service_img_' . $uniq_id . '" class="mage_modal"><img src="' . esc_url($img_url) . '"/></div>';
                                         }
                                         if($value['service_qty'] > 0){
                                             ?>
                                             <div class="rbfw-optional-add-ons">
                                                 <div>
-                                                    <div>
-                                                        <?php echo wp_kses($img , rbfw_allowed_html()); ?>
-                                                    </div>
+                                                    <?php // No image on this service: skip the holder entirely instead of leaving an empty box in the row. ?>
+                                                    <?php if ($img) { ?>
+                                                        <div>
+                                                            <?php echo wp_kses($img , rbfw_allowed_html()); ?>
+                                                        </div>
+                                                    <?php } ?>
                                                     <div>
                                                         <span class="rbfw_bikecarsd_type_title"><?php echo esc_html($value['service_name']); ?></span>
                                                         <?php if(!empty($value['service_desc'])){ ?>
@@ -443,6 +454,10 @@
                                                 <?php echo wp_kses(wc_price(0) , rbfw_allowed_html()); ?>
                                             </span>
                                         </li>
+
+                                        <?php // Tax the item is configured for, as WooCommerce will charge it. ?>
+                                        <?php rbfw_tax_summary_row( $post_id ); ?>
+
                                         <?php if($fee_management_cost_enable){ ?>
                                             <li class="management-costing rbfw-cond">
                                                 <?php esc_html_e('Management Cost','booking-and-rental-manager-for-woocommerce'); ?>

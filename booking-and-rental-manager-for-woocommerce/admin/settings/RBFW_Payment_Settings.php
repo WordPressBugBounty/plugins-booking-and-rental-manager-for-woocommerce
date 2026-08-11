@@ -42,6 +42,25 @@
 				add_action( 'wp_ajax_rbfw_save_gateway_settings', array( $this, 'ajax_save_gateway_settings' ) );
 				add_action( 'wp_ajax_rbfw_save_booking_mode', array( $this, 'ajax_save_booking_mode' ) );
 				add_action( 'wp_ajax_rbfw_install_activate_wc', array( $this, 'ajax_install_activate_wc' ) );
+				// Live "is a booking payable right now?" snapshot, so enabling a gateway
+				// updates the editor in place instead of needing a page reload.
+				add_action( 'wp_ajax_rbfw_payment_status', array( $this, 'ajax_payment_status' ) );
+
+				// "Payment Method" status card in the modern rental-item editor sidebar,
+				// plus the slim "no payment method configured" banner under its step bar.
+				// Mirrors the taxi plugin (MPTBM_Payment_Settings), where the same pair
+				// lives on the transportation edit screen.
+				add_action( 'rbfw_modern_editor_sidebar_top', array( $this, 'render_payment_sidebar_card' ) );
+				add_action( 'rbfw_modern_editor_notices', array( $this, 'render_editor_payment_notice' ) );
+
+				// The popup those two open. Rendered in the footer — NOT inside the
+				// editor markup — because RBFW_Modern_Editor's collectFormData() saves
+				// every named control inside .rbfw-me-wrap as rental-item meta, and this
+				// popup is full of booking-mode / gateway fields that must never go there.
+				// Registered after payment_tabs_script() so its script (which owns
+				// window.rbfwApplyPaymentMode on this screen) is the last one bound.
+				add_action( 'admin_footer', array( $this, 'render_payment_config_modal' ), 11 );
+				add_action( 'admin_enqueue_scripts', array( $this, 'maybe_enqueue_editor_payment_assets' ) );
 
 				// Gateway keys are managed by their own AJAX modals and never travel with
 				// the settings form, so preserve them when the Settings API saves the rest.
@@ -52,6 +71,27 @@
 			private function is_settings_screen() {
 				$screen = get_current_screen();
 				return $screen && ( $screen->id === self::SCREEN || strpos( $screen->id, 'rbfw_settings_page' ) !== false );
+			}
+
+			/** Is this the modern rental-item editor page (admin.php?…&page=rbfw_modern_editor)? */
+			private function is_modern_editor_screen() {
+				if ( ! class_exists( 'RBFW_Modern_Editor' ) || ! is_admin() ) {
+					return false;
+				}
+				// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen check, no state change.
+				$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+
+				return RBFW_Modern_Editor::PAGE_SLUG === $page;
+			}
+
+			/**
+			 * The gateway Configure modals (render_gateway_modals()), the WooCommerce
+			 * install modal (render_wc_warning_modal()) and the `.gateway-card` styling
+			 * (payment_tabs_script()) are needed by the modern editor's Payment Method
+			 * popup too, not just the real Payments tab.
+			 */
+			private function is_settings_or_editor_screen() {
+				return $this->is_settings_screen() || $this->is_modern_editor_screen();
 			}
 
 			private function has_woo() {
@@ -65,6 +105,479 @@
 			private function opt( $key, $default = '' ) {
 				$o = get_option( self::OPTION, array() );
 				return isset( $o[ $key ] ) ? $o[ $key ] : $default;
+			}
+
+			/* ─────────────────────────────────────────────────────────────────
+			 * Modern rental-item editor: Payment Method card, notice + popup
+			 * ───────────────────────────────────────────────────────────────── */
+
+			/** Shared status checker instance (hook-free, safe to build on demand). */
+			private function checker() {
+				static $checker = null;
+				if ( null === $checker && class_exists( 'RBFW_Payment_Status_Checker' ) ) {
+					$checker = new RBFW_Payment_Status_Checker();
+				}
+				return $checker;
+			}
+
+			/**
+			 * Does the booking flow currently in effect have a payment method that can
+			 * actually complete a booking? Fails OPEN when the checker is unavailable so
+			 * a missing class can never nag the admin about a problem that may not exist.
+			 */
+			private function has_gateway_for_active_mode() {
+				$checker = $this->checker();
+				return $checker ? $checker->has_gateway_for_active_mode() : true;
+			}
+
+			/** The active booking flow: 'woocommerce' | 'standalone'. */
+			private function active_mode() {
+				if ( class_exists( 'RBFW_Function' ) ) {
+					return RBFW_Function::booking_mode();
+				}
+				$checker = $this->checker();
+				return $checker ? $checker->active_mode() : 'woocommerce';
+			}
+
+			/** Human-readable label for the active booking flow. */
+			private function get_booking_mode_label() {
+				return ( 'woocommerce' === $this->active_mode() )
+					? __( 'WooCommerce', 'booking-and-rental-manager-for-woocommerce' )
+					: __( 'Custom Payment', 'booking-and-rental-manager-for-woocommerce' );
+			}
+
+			/**
+			 * Names of the payment method(s) enabled for the active booking flow.
+			 *
+			 * Read entirely through RBFW_Payment_Status_Checker — the same source
+			 * has_gateway_for_active_mode() counts — so the card can never list a method
+			 * while also warning that none is configured. In particular the Pro gateways
+			 * come from the Pro-gated `rbfw_pro_enabled_payment_methods` filter rather
+			 * than from raw enable toggles, which survive Pro being deactivated.
+			 *
+			 * @return string[]
+			 */
+			private function get_active_gateway_names() {
+				$checker = $this->checker();
+				if ( ! $checker ) {
+					return array();
+				}
+
+				if ( 'woocommerce' === $this->active_mode() ) {
+					$names = array();
+					foreach ( $checker->get_enabled_woocommerce_gateways() as $gateway ) {
+						if ( ! is_object( $gateway ) || ! method_exists( $gateway, 'get_title' ) ) {
+							continue;
+						}
+						$title   = method_exists( $gateway, 'get_method_title' ) ? $gateway->get_method_title() : '';
+						$names[] = $title ? $title : $gateway->get_title();
+					}
+					return $names;
+				}
+
+				// Standalone: any Pro gateway, plus the free Offline method.
+				//
+				// Pro's `rbfw_pro_enabled_payment_methods` payload is keyed by method id and
+				// ALREADY carries an 'offline' entry (under the admin's own label) whenever
+				// Offline is on — so only add the free plugin's own entry when Pro has not
+				// contributed one, otherwise the card reads "Pay on Pickup, Offline Payment".
+				$pro   = (array) $checker->get_enabled_pro_payment_methods();
+				$names = array_values( array_map( 'strval', $pro ) );
+				if ( $checker->offline_payment_enabled() && ! array_key_exists( 'offline', $pro ) ) {
+					$label   = trim( (string) $this->opt( 'rbfw_offline_label', '' ) );
+					$names[] = $label ? $label : __( 'Offline Payment', 'booking-and-rental-manager-for-woocommerce' );
+				}
+				return $names;
+			}
+
+			/**
+			 * Compact "Payment Method" card for the modern editor sidebar — shows the
+			 * live booking flow + enabled method(s) and opens the payment popup.
+			 *
+			 * @param int $post_id Unused; the payment setup is site-wide, not per item.
+			 */
+			public function render_payment_sidebar_card( $post_id = 0 ) {
+				unset( $post_id );
+				if ( ! current_user_can( 'manage_options' ) ) {
+					return;
+				}
+				$this->editor_payment_styles();
+
+				$gateway_names = $this->get_active_gateway_names();
+				$has_gateway   = $this->has_gateway_for_active_mode();
+				?>
+				<div class="rbfw-me-card rbfw-me-card--sidebar rbfw-me-payment-card<?php echo $has_gateway ? '' : ' is-warning'; ?>">
+					<div class="rbfw-me-card__head">
+						<h3>
+							<span class="dashicons dashicons-money-alt" aria-hidden="true"></span>
+							<?php esc_html_e( 'Payment Method', 'booking-and-rental-manager-for-woocommerce' ); ?>
+						</h3>
+					</div>
+					<div class="rbfw-me-card__body">
+						<?php // data-field, not row order: the live refresh targets these by name. ?>
+						<div class="rbfw-me-payment-row" data-field="mode">
+							<span><?php esc_html_e( 'Active Method', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+							<strong><?php echo esc_html( $this->get_booking_mode_label() ); ?></strong>
+						</div>
+						<div class="rbfw-me-payment-row" data-field="gateway">
+							<span><?php esc_html_e( 'Active Gateway', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+							<strong><?php echo esc_html( $gateway_names ? implode( ', ', $gateway_names ) : __( 'None', 'booking-and-rental-manager-for-woocommerce' ) ); ?></strong>
+						</div>
+
+						<?php
+							// Both rows are always emitted, with the inactive one hidden: the
+							// refresh after a gateway is enabled only toggles visibility, and
+							// jQuery cannot show an element that was never rendered.
+						?>
+						<p class="rbfw-me-payment-link"<?php echo $gateway_names ? '' : ' style="display:none;"'; ?>>
+							<a href="#" data-rbfw-payment-modal-open><?php esc_html_e( 'Payment Settings', 'booking-and-rental-manager-for-woocommerce' ); ?></a>
+						</p>
+						<p class="rbfw-me-payment-warning"<?php echo $has_gateway ? ' style="display:none;"' : ''; ?>>
+							<a href="#" data-rbfw-payment-modal-open><?php esc_html_e( 'Configure payment method', 'booking-and-rental-manager-for-woocommerce' ); ?></a>
+						</p>
+					</div>
+				</div>
+				<?php
+			}
+
+			/**
+			 * Slim banner under the editor's step bar, shown only while the active
+			 * booking flow has no usable payment method — the item being edited can't be
+			 * booked until that is fixed. Silent once a method is live.
+			 *
+			 * @param int $post_id Unused; the payment setup is site-wide, not per item.
+			 */
+			public function render_editor_payment_notice( $post_id = 0 ) {
+				unset( $post_id );
+				if ( ! current_user_can( 'manage_options' ) ) {
+					return;
+				}
+				$this->editor_payment_styles();
+
+				// Always emitted, hidden while payment is set up. Rendering it only when
+				// broken would mean the banner could never appear (or disappear) in
+				// response to the live refresh — jQuery cannot slide an element that is
+				// not in the DOM, and a reload here would discard unsaved item edits.
+				$hidden = $this->has_gateway_for_active_mode();
+				?>
+				<div class="rbfw-me-payment-notice" id="rbfw-me-payment-notice"<?php echo $hidden ? ' style="display:none;"' : ''; ?>>
+					<span class="rbfw-me-payment-notice__icon" aria-hidden="true">
+						<span class="dashicons dashicons-warning"></span>
+					</span>
+					<span class="rbfw-me-payment-notice__text">
+						<?php esc_html_e( 'No payment method is currently configured.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+					</span>
+					<a href="#" class="rbfw-me-payment-notice-link" data-rbfw-payment-modal-open>
+						<?php esc_html_e( 'Please configure a payment method to accept bookings.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+						<span class="dashicons dashicons-arrow-right-alt2" aria-hidden="true"></span>
+					</a>
+				</div>
+				<?php
+			}
+
+			/**
+			 * The popup opened by the sidebar card / banner links — lets the admin flip
+			 * the booking flow and enable a gateway without leaving the editor. Reuses
+			 * the exact same self-contained, AJAX-saving pieces the real Payments tab
+			 * uses (flow selector, WooCommerce Payment Methods manager, Custom Payment
+			 * gateway cards + their Configure modals); nothing is re-implemented.
+			 *
+			 * Deliberately leaves out the Settings-API-only controls (Require Account
+			 * Login, Booking Confirmation Page, WooCommerce Additional Settings), which
+			 * only persist on the real form's submit — the popup links out for those.
+			 */
+			public function render_payment_config_modal() {
+				if ( ! $this->is_modern_editor_screen() || ! current_user_can( 'manage_options' ) ) {
+					return;
+				}
+				$this->editor_payment_styles();
+
+				$is_wc        = ( 'woocommerce' === $this->active_mode() );
+				$settings_url = admin_url( 'edit.php?post_type=rbfw_item&page=rbfw_settings_page#rbfw_payment_settings' );
+				$mode_labels  = array(
+					'woocommerce' => __( 'WooCommerce Checkout', 'booking-and-rental-manager-for-woocommerce' ),
+					'standalone'  => __( 'Custom Payment (Standalone)', 'booking-and-rental-manager-for-woocommerce' ),
+				);
+				?>
+				<div class="rbfw-payment-modal" id="rbfw-payment-modal" style="display:none;">
+					<div class="rbfw-payment-modal-box">
+						<div class="rbfw-payment-modal-head">
+							<h2><?php esc_html_e( 'Payment Method', 'booking-and-rental-manager-for-woocommerce' ); ?></h2>
+							<button type="button" class="rbfw-payment-modal-close" aria-label="<?php esc_attr_e( 'Close', 'booking-and-rental-manager-for-woocommerce' ); ?>">&times;</button>
+						</div>
+						<div class="rbfw-payment-modal-body">
+							<?php $this->render_mode_selector(); ?>
+
+							<div class="rbfw-payment-modal-section" data-mode-section="woocommerce"<?php echo $is_wc ? '' : ' style="display:none;"'; ?>>
+								<?php if ( $this->has_woo() ) : ?>
+									<?php $this->render_wc_payment_manager(); ?>
+								<?php else : ?>
+									<?php // Without WooCommerce the manager renders nothing; say so rather than reveal a blank panel. The card above carries the Install & Activate button. ?>
+									<p class="rbfw-payment-modal-empty">
+										<?php esc_html_e( 'WooCommerce is not active, so there are no WooCommerce payment methods to configure yet. Use the Install & Activate button on the WooCommerce Checkout card above, then reopen this popup.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+									</p>
+								<?php endif; ?>
+							</div>
+							<div class="rbfw-payment-modal-section" data-mode-section="standalone"<?php echo $is_wc ? ' style="display:none;"' : ''; ?>>
+								<?php $this->render_gateway_cards_list(); ?>
+							</div>
+
+							<p class="rbfw-payment-modal-more">
+								<a href="<?php echo esc_url( $settings_url ); ?>" target="_blank" rel="noopener noreferrer">
+									<?php esc_html_e( 'More payment settings (login requirement, confirmation page, checkout options)', 'booking-and-rental-manager-for-woocommerce' ); ?>
+								</a>
+							</p>
+						</div>
+					</div>
+				</div>
+				<script>
+				jQuery(function($){
+					var $modal = $('#rbfw-payment-modal');
+					if (!$modal.length) { return; }
+					// Out of any wrapper that could clip it (and out of .rbfw-me-wrap, whose
+					// inputs the editor serializes into item meta on save).
+					$modal.appendTo('body');
+
+					var modeLabels = <?php echo wp_json_encode( $mode_labels ); ?>;
+
+					function applyModalMode(mode){
+						var isWc = (mode !== 'standalone');
+						$modal.find('[data-mode-section="woocommerce"]').toggle(isWc);
+						$modal.find('[data-mode-section="standalone"]').toggle(!isWc);
+
+						// The selector's "You're configuring: <flow>" banner is normally kept in
+						// sync by payment_tabs_script()'s applyModeVisibility(), which stands down
+						// on this screen — so update it here or it keeps naming the old flow.
+						var $ctx = $modal.find('.rbfw-bm-context');
+						if ($ctx.length) {
+							var key = isWc ? 'woocommerce' : 'standalone';
+							$ctx.attr('data-mode', key);
+							$ctx.find('.rbfw-bm-context-icon')
+								.removeClass('dashicons-cart dashicons-money-alt')
+								.addClass(isWc ? 'dashicons-cart' : 'dashicons-money-alt');
+							$ctx.find('.rbfw-bm-context-mode').text(modeLabels[key]);
+						}
+					}
+
+					// The flow selector persists the choice over AJAX and calls
+					// window.rbfwApplyPaymentMode() to switch the view (including on a
+					// rollback after a failed save). payment_tabs_script() only claims that
+					// hook on the settings page, so chain onto whatever is already there.
+					var prevApply = window.rbfwApplyPaymentMode;
+					window.rbfwApplyPaymentMode = function(mode){
+						if (typeof prevApply === 'function') { prevApply(mode); }
+						applyModalMode(mode);
+					};
+
+					// Switch the view on click as well, so the section follows the card even
+					// before the save round-trip resolves. Bound to EVERY card, including a
+					// disabled one: the flow selector refuses to *save* an unavailable flow,
+					// but revealing its settings is how the admin unlocks it (enable the free
+					// Offline gateway, or install WooCommerce from the card's own CTA).
+					// Without this the popup dead-ends on exactly the misconfigured sites the
+					// banner is complaining about.
+					$modal.on('click', '.rbfw-bm-card', function(){
+						applyModalMode($(this).data('mode'));
+					});
+
+					$(document).on('click', '[data-rbfw-payment-modal-open]', function(e){
+						e.preventDefault();
+						$modal.css('display', 'flex');
+					});
+					$modal.on('click', '.rbfw-payment-modal-close', function(){ $modal.hide(); });
+					$modal.on('click', function(e){
+						if (e.target === this) { $modal.hide(); }
+					});
+					$(document).on('keydown', function(e){
+						if ((e.key === 'Escape' || e.keyCode === 27) && $modal.is(':visible')) {
+							$modal.hide();
+						}
+					});
+
+					// ── Live refresh ────────────────────────────────────────────────
+					// Enabling a gateway used to leave the card, the banner, the
+					// no-gateway warning and the locked Custom Payment card all showing
+					// their page-load state until the admin reloaded. Reloading is not an
+					// option here (it would discard unsaved rental-item edits), so pull a
+					// fresh snapshot and repaint in place. Fired by both save paths: the
+					// custom gateway modals and the WooCommerce toggle.
+					var statusNonce = <?php echo wp_json_encode( wp_create_nonce( 'rbfw_payment_status' ) ); ?>;
+
+					$(document).on('rbfw:payment-updated', function(){
+						$.post(ajaxurl, { action: 'rbfw_payment_status', nonce: statusNonce }).done(function(res){
+							if (!res || !res.success || !res.data) { return; }
+							var d = res.data;
+
+							// Sidebar Payment Method card.
+							var $card = $('.rbfw-me-payment-card');
+							$card.toggleClass('is-warning', !d.has_gateway);
+							$card.find('.rbfw-me-payment-row[data-field="mode"] strong').text(d.mode_label);
+							$card.find('.rbfw-me-payment-row[data-field="gateway"] strong').text(d.gateway_names);
+							$card.find('.rbfw-me-payment-link').toggle(!!d.has_names);
+							$card.find('.rbfw-me-payment-warning').toggle(!d.has_gateway);
+
+							// Banner under the step bar.
+							var $notice = $('#rbfw-me-payment-notice');
+							if ($notice.length) {
+								if (d.has_gateway) { $notice.slideUp(160); }
+								else if (!$notice.is(':visible')) { $notice.slideDown(160); }
+							}
+
+							// The popup's own "no gateway enabled" warning.
+							var $slot = $modal.find('.rbfw-bm-gateway-warning-slot').empty();
+							if (d.warning_text) {
+								$slot.append(
+									$('<div class="rbfw-bm-gateway-warning rbfw-blink-soft"><span class="dashicons dashicons-warning"></span><p></p></div>')
+										.find('p').text(d.warning_text).end()
+								);
+							}
+
+							// Enabling the free Offline gateway unlocks the Custom Payment
+							// flow, so drop the disabled state and its "enable Offline
+							// below" hint rather than leaving a card that can't be picked.
+							if (d.custom_available) {
+								var $std = $modal.find('.rbfw-bm-card[data-mode="standalone"]');
+								$std.removeClass('is-disabled').removeAttr('aria-disabled');
+								$std.find('input[type=radio]').prop('disabled', false);
+								$std.find('.rbfw-bm-card-cta--hint').remove();
+							}
+						});
+					});
+				});
+				</script>
+				<?php
+			}
+
+			/**
+			 * Current payment state as JSON, for repainting server-rendered UI after a
+			 * gateway is enabled/disabled without reloading the page (which on the editor
+			 * would throw away the admin's unsaved rental-item edits).
+			 *
+			 * Everything here comes from the same helpers that rendered the markup in the
+			 * first place, so the refreshed view can't drift from a freshly loaded one.
+			 */
+			public function ajax_payment_status() {
+				check_ajax_referer( 'rbfw_payment_status', 'nonce' );
+				if ( ! current_user_can( 'manage_options' ) ) {
+					wp_send_json_error( __( 'Permission denied.', 'booking-and-rental-manager-for-woocommerce' ), 403 );
+				}
+
+				$names       = $this->get_active_gateway_names();
+				$has_gateway = $this->has_gateway_for_active_mode();
+				$is_wc       = ( 'woocommerce' === $this->active_mode() );
+
+				$warning = '';
+				if ( ! $has_gateway ) {
+					$warning = $is_wc
+						? __( 'WooCommerce mode is selected, but no WooCommerce payment gateway is enabled yet. Customers won\'t be able to complete a booking until you enable one below.', 'booking-and-rental-manager-for-woocommerce' )
+						: __( 'Custom Payment mode is selected, but no gateway (PayPal, Stripe, or Offline) is enabled yet. Customers won\'t be able to complete a booking until you enable one below.', 'booking-and-rental-manager-for-woocommerce' );
+				}
+
+				wp_send_json_success(
+					array(
+						'mode'          => $this->active_mode(),
+						'mode_label'    => $this->get_booking_mode_label(),
+						'has_gateway'   => (bool) $has_gateway,
+						'has_names'     => ! empty( $names ),
+						'gateway_names' => $names ? implode( ', ', $names ) : __( 'None', 'booking-and-rental-manager-for-woocommerce' ),
+						'warning_text'  => $warning,
+						// Whether the Custom Payment flow can be chosen at all — enabling the
+						// free Offline gateway unlocks the card that was rendered disabled.
+						'custom_available' => (bool) ( $this->is_pro() || ( class_exists( 'RBFW_Function' ) && RBFW_Function::offline_payment_enabled() ) ),
+					)
+				);
+			}
+
+			/**
+			 * WooCommerce admin assets the popup's native gateway forms rely on, plus the
+			 * dashicons the card/banner use. Only on the modern editor — the settings page
+			 * already gets these from RBFW_WC_Payment_Manager::enqueue_assets().
+			 */
+			public function maybe_enqueue_editor_payment_assets() {
+				if ( ! $this->is_modern_editor_screen() || ! current_user_can( 'manage_options' ) ) {
+					return;
+				}
+				wp_enqueue_style( 'dashicons' );
+				if ( $this->has_woo() ) {
+					wp_enqueue_style( 'woocommerce_admin_styles' );
+					wp_enqueue_script( 'wc-enhanced-select' );
+					wp_enqueue_script( 'wc-jquery-tiptip' );
+				}
+			}
+
+			/** Styles for the editor card / banner / popup. Printed once per request. */
+			private function editor_payment_styles() {
+				static $printed = false;
+				if ( $printed ) {
+					return;
+				}
+				$printed = true;
+				?>
+				<style id="rbfw-editor-payment-styles">
+				/* Payment Method sidebar card — inherits .rbfw-me-card--sidebar chrome. */
+				.rbfw-me-payment-card.is-warning{border-color:rgba(220,38,38,.30);}
+				/* PALETTE — the editor's own tokens (see .rbfw-me-wrap in
+				   admin/css/rbfw-modern-editor.css), never ad-hoc colours:
+				     primary   --me-primary #1a56db / --me-primary-dk #1347b8 / --me-primary-soft #eef3ff
+				     secondary --me-text-secondary #334155, --me-muted #64748b, --me-border-subtle #f1f5f9
+				     alert     --me-danger #dc2626
+				   Brand pink (#F12971) is deliberately NOT used here — rbfw_global_settings.css
+				   reserves it for the Save button and the Pro card (same note as
+				   booking_mode_styles()), so payment UI reading pink made it look like an
+				   unrelated system.
+				   Every var() carries a literal fallback because the popup is appended to
+				   <body>, outside .rbfw-me-wrap, where these tokens do not resolve.
+				   rgba() tints are hand-matched to #1a56db / #dc2626. */
+				.rbfw-me-payment-card .rbfw-me-card__head h3{display:flex;align-items:center;gap:7px;}
+				.rbfw-me-payment-card .rbfw-me-card__head .dashicons{font-size:17px;width:17px;height:17px;line-height:1;color:var(--me-primary,#1a56db);}
+				.rbfw-me-payment-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;}
+				.rbfw-me-payment-row + .rbfw-me-payment-row{border-top:1px solid var(--me-border-subtle,#f1f5f9);}
+				.rbfw-me-payment-row span{color:var(--me-muted,#64748b);font-weight:500;}
+				.rbfw-me-payment-row strong{color:var(--me-text,#0f172a);font-weight:700;text-align:right;overflow-wrap:anywhere;}
+				.rbfw-me-payment-link,.rbfw-me-payment-warning{margin:8px 0 0;padding-top:10px;border-top:1px solid var(--me-border-subtle,#f1f5f9);font-size:12.5px;}
+				.rbfw-me-payment-link a{color:var(--me-primary,#1a56db);font-weight:600;text-decoration:none;}
+				.rbfw-me-payment-warning a{color:var(--me-danger,#dc2626);font-weight:600;text-decoration:none;}
+				.rbfw-me-payment-link a:hover,.rbfw-me-payment-warning a:hover{text-decoration:underline;}
+
+				/* Slim "no payment method" banner under the step bar. Hidden along with the
+				   rest of the editor while its loading skeleton is up, so it doesn't flash
+				   on its own above an otherwise blank page.
+				   Deliberately kept to the SAME footprint as the flat strip it replaces:
+				   full bleed, ~38px tall. 8px block padding + a 22px tall control is the
+				   budget — don't grow the icon chip or the CTA past that or the step bar
+				   and the editor body below start getting pushed down.
+				   Colour split: the chip is --me-danger because it flags a real blocker,
+				   the CTA is --me-primary because it is the primary action on this screen. */
+				.rbfw-me-wrap.is-loading .rbfw-me-payment-notice{opacity:0;pointer-events:none;}
+				.rbfw-me-payment-notice{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:9px;width:100%;box-sizing:border-box;text-align:center;padding:8px 22px;margin:0;background:linear-gradient(90deg,var(--me-primary-soft,#eef3ff) 0%,#f6f9ff 100%);border-top:1px solid rgba(26,86,219,.16);border-bottom:1px solid rgba(26,86,219,.16);font-size:13px;font-weight:600;color:var(--me-text-secondary,#334155);line-height:1.4;}
+				.rbfw-me-payment-notice__icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--me-danger,#dc2626);box-shadow:0 2px 6px rgba(220,38,38,.28);}
+				.rbfw-me-payment-notice__icon .dashicons{font-size:13px;width:13px;height:13px;line-height:1;color:#fff;}
+				.rbfw-me-payment-notice__text{color:var(--me-text-secondary,#334155);}
+				.rbfw-me-payment-notice-link{display:inline-flex;align-items:center;gap:4px;padding:2px 12px;border-radius:20px;background:#fff;border:1px solid var(--me-primary,#1a56db);color:var(--me-primary,#1a56db);font-size:12.5px;font-weight:700;text-decoration:none;cursor:pointer;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:background .15s ease,border-color .15s ease,color .15s ease,box-shadow .15s ease;}
+				.rbfw-me-payment-notice-link .dashicons{font-size:13px;width:13px;height:13px;line-height:1;color:inherit;transition:transform .15s ease;}
+				.rbfw-me-payment-notice-link:hover{background:var(--me-primary,#1a56db);border-color:var(--me-primary-dk,#1347b8);color:#fff;box-shadow:0 3px 10px rgba(26,86,219,.28);}
+				.rbfw-me-payment-notice-link:hover .dashicons{transform:translateX(2px);}
+				@media (prefers-reduced-motion:reduce){.rbfw-me-payment-notice-link,.rbfw-me-payment-notice-link .dashicons{transition:none;}.rbfw-me-payment-notice-link:hover .dashicons{transform:none;}}
+
+				/* Payment Method popup. */
+				.rbfw-payment-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100001;align-items:center;justify-content:center;padding:20px;}
+				.rbfw-payment-modal-box{background:#fff;border-radius:12px;max-width:860px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 24px 60px rgba(15,23,42,.35);}
+				.rbfw-payment-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--me-border,#e2e8f0);position:sticky;top:0;background:#fff;z-index:1;}
+				.rbfw-payment-modal-head h2{margin:0;font-size:17px;font-weight:700;color:var(--me-text,#0f172a);}
+				.rbfw-payment-modal-close{border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:var(--me-muted,#64748b);padding:4px 8px;}
+				.rbfw-payment-modal-close:hover{color:var(--me-text,#0f172a);}
+				.rbfw-payment-modal-body{padding:20px 24px 28px;}
+				.rbfw-payment-modal-section{margin-top:16px;}
+				/* The settings page's "How payments work here" strip and its step list are
+				   page-level onboarding; inside a focused popup they only add height. */
+				.rbfw-payment-modal .rbfw-pay-intro{display:none;}
+				.rbfw-payment-modal-empty{margin:0;padding:14px 16px;border:1px dashed var(--me-border,#e2e8f0);border-radius:10px;background:#f9fafb;color:var(--me-muted,#64748b);font-size:12.5px;line-height:1.6;}
+				.rbfw-payment-modal-more{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--me-border,#e2e8f0);font-size:12.5px;}
+				.rbfw-payment-modal-more a{color:var(--me-primary,#1a56db);font-weight:600;text-decoration:none;}
+				.rbfw-payment-modal-more a:hover{text-decoration:underline;}
+				@media (max-width:680px){.rbfw-payment-modal-box{max-height:92vh;}}
+				</style>
+				<?php
 			}
 
 			/** Add the "Payments" tab to the settings navigation. */
@@ -144,6 +657,165 @@
 				return $settings_fields;
 			}
 
+			/* ============================================================== *
+			 * Accounting payment methods (card / cheque / cash / transfer)
+			 * ============================================================== */
+
+			/**
+			 * Sanitize the posted method rows.
+			 *
+			 * Slugs are carried on the row rather than regenerated from the label, so renaming
+			 * "Cheque" to "Chèque" does not orphan every booking recorded against it. Two rows
+			 * resolving to the same slug are made unique instead of silently overwriting.
+			 *
+			 * @param mixed $raw
+			 * @return array
+			 */
+			public static function sanitize_payment_methods( $raw ) {
+				if ( ! is_array( $raw ) ) {
+					return array();
+				}
+
+				$out = array();
+				foreach ( $raw as $row ) {
+					if ( ! is_array( $row ) ) {
+						continue;
+					}
+
+					$label = isset( $row['label'] ) ? sanitize_text_field( wp_unslash( $row['label'] ) ) : '';
+					if ( '' === trim( $label ) ) {
+						// Unlabelled methods cannot be shown or reconciled.
+						continue;
+					}
+
+					$slug = isset( $row['slug'] ) ? sanitize_key( $row['slug'] ) : '';
+					if ( '' === $slug ) {
+						$slug = sanitize_key( sanitize_title( $label ) );
+					}
+					if ( '' === $slug ) {
+						continue;
+					}
+
+					$base = $slug;
+					$i    = 2;
+					while ( isset( $out[ $slug ] ) ) {
+						$slug = $base . '_' . $i;
+						$i++;
+					}
+
+					$out[ $slug ] = array(
+						'label'        => $label,
+						'icon'         => isset( $row['icon'] ) ? sanitize_html_class( $row['icon'] ) : '',
+						'instructions' => isset( $row['instructions'] ) ? wp_kses_post( wp_unslash( $row['instructions'] ) ) : '',
+						'enabled'      => ! empty( $row['enabled'] ),
+					);
+				}
+
+				return $out;
+			}
+
+			/**
+			 * The offline payment types, rendered INSIDE the Offline gateway's Configure modal.
+			 *
+			 * This is where they belong: the Offline gateway is literally "the customer pays
+			 * you directly", and card / cheque / cash / bank transfer are the ways that
+			 * happens. Listing them anywhere else on this tab reads as a second, competing
+			 * set of payment settings sitting next to the gateway that already describes them.
+			 *
+			 * The same list is what an admin can later record against ANY booking (including
+			 * WooCommerce ones) and what the "Revenue by payment method" totals bucket into.
+			 *
+			 * Rows carry no `name` attributes — the modal saves over AJAX, not with the
+			 * settings form, and the collector below reads them positionally.
+			 *
+			 * @return void
+			 */
+			public function render_offline_methods() {
+				if ( ! function_exists( 'rbfw_payment_methods' ) ) {
+					return;
+				}
+				$methods = rbfw_payment_methods();
+				?>
+				<div class="rbfw-gw-field rbfw-pm-repeater">
+					<label class="rbfw-gw-label"><?php esc_html_e( 'Payment Types', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
+					<p class="rbfw-pm-intro">
+						<?php esc_html_e( 'The ways customers can pay you directly. Shown as choices at the standalone checkout, recordable against any booking afterwards (including WooCommerce ones, for your books), and the buckets the "Revenue by payment method" totals reconcile into.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+					</p>
+
+					<div class="rbfw-pm-body">
+						<?php foreach ( $methods as $slug => $m ) : ?>
+							<div class="rbfw-pm-row" data-slug="<?php echo esc_attr( $slug ); ?>">
+								<label class="rbfw-pm-active" title="<?php esc_attr_e( 'Offer this at checkout', 'booking-and-rental-manager-for-woocommerce' ); ?>">
+									<input type="checkbox" class="rbfw-pm-enabled" <?php checked( ! empty( $m['enabled'] ) ); ?>>
+								</label>
+								<input type="text" class="rbfw-pm-label" value="<?php echo esc_attr( $m['label'] ); ?>" placeholder="<?php esc_attr_e( 'Label', 'booking-and-rental-manager-for-woocommerce' ); ?>">
+								<input type="text" class="rbfw-pm-instructions" value="<?php echo esc_attr( $m['instructions'] ); ?>" placeholder="<?php esc_attr_e( 'Instructions shown at checkout (optional)', 'booking-and-rental-manager-for-woocommerce' ); ?>">
+								<button type="button" class="rbfw-pm-remove" aria-label="<?php esc_attr_e( 'Remove', 'booking-and-rental-manager-for-woocommerce' ); ?>">&times;</button>
+							</div>
+						<?php endforeach; ?>
+					</div>
+
+					<button type="button" class="rbfw-pm-add"><?php esc_html_e( '+ Add payment type', 'booking-and-rental-manager-for-woocommerce' ); ?></button>
+					<p style="margin:10px 0 0;font-size:12px;color:#6b7280;">
+						<?php esc_html_e( 'Removing a type here does not change bookings already recorded against it — those keep showing what they were paid with.', 'booking-and-rental-manager-for-woocommerce' ); ?>
+					</p>
+				</div>
+
+				<style>
+					/* Scoped to the Offline modal so it cannot leak into the settings form. */
+					.rbfw-gw-modal .rbfw-pm-intro {
+						margin: 0 0 12px; font-size: 12px; color: #6b7280; line-height: 1.55;
+					}
+					.rbfw-gw-modal .rbfw-pm-row {
+						display: grid;
+						grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1.4fr) 26px;
+						align-items: center; gap: 8px; margin-bottom: 8px;
+					}
+					.rbfw-gw-modal .rbfw-pm-row input[type="text"] {
+						width: 100%; min-width: 0; margin: 0;
+					}
+					.rbfw-gw-modal .rbfw-pm-active { display: flex; justify-content: center; margin: 0; }
+					.rbfw-gw-modal .rbfw-pm-active input { margin: 0; }
+					.rbfw-gw-modal .rbfw-pm-remove {
+						background: none; border: 0; cursor: pointer; padding: 0;
+						color: #b32d2e; font-size: 18px; line-height: 1;
+					}
+					.rbfw-gw-modal .rbfw-pm-remove:hover { color: #8a2424; }
+					.rbfw-gw-modal .rbfw-pm-add {
+						background: none; border: 1px dashed #cbd5e1; border-radius: 7px;
+						padding: 7px 14px; cursor: pointer; font-size: 12.5px;
+						color: #0f766e; font-weight: 600; width: 100%;
+					}
+					.rbfw-gw-modal .rbfw-pm-add:hover { border-color: #0f766e; background: #f0fdfa; }
+					@media screen and (max-width: 600px) {
+						.rbfw-gw-modal .rbfw-pm-row {
+							grid-template-columns: 26px minmax(0, 1fr) 26px;
+						}
+						.rbfw-gw-modal .rbfw-pm-instructions { grid-column: 2 / 4; }
+					}
+				</style>
+				<script>
+				( function ( $ ) {
+					$( document ).on( 'click', '.rbfw-gw-modal .rbfw-pm-add', function () {
+						// A blank slug tells the server to derive one from the label, which is
+						// what gives a brand new type a stable, readable key.
+						$( this ).closest( '.rbfw-pm-repeater' ).find( '.rbfw-pm-body' ).append(
+							'<div class="rbfw-pm-row" data-slug="">' +
+								'<label class="rbfw-pm-active"><input type="checkbox" class="rbfw-pm-enabled" checked></label>' +
+								'<input type="text" class="rbfw-pm-label" value="">' +
+								'<input type="text" class="rbfw-pm-instructions" value="">' +
+								'<button type="button" class="rbfw-pm-remove">&times;</button>' +
+							'</div>'
+						);
+					} );
+					$( document ).on( 'click', '.rbfw-gw-modal .rbfw-pm-remove', function () {
+						$( this ).closest( '.rbfw-pm-row' ).remove();
+					} );
+				} )( jQuery );
+				</script>
+				<?php
+			}
+
 			/**
 			 * The "Booking Mode" selector — now the SINGLE, self-explanatory switch that
 			 * decides whether WooCommerce or the standalone Custom Payment flow processes
@@ -179,7 +851,7 @@
 				$checker          = class_exists( 'RBFW_Payment_Status_Checker' ) ? new RBFW_Payment_Status_Checker() : null;
 				$has_gateway      = $checker ? $checker->has_gateway_for_active_mode() : true;
 				?>
-				<div class="rbfw-bm-wrap<?php echo ( 'both' === $availability ) ? '' : ' rbfw-bm-single'; ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'rbfw_save_booking_mode' ) ); ?>">
+				<div class="rbfw-bm-wrap<?php echo ( 'both' === $availability ) ? '' : ' rbfw-bm-single'; ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'rbfw_save_booking_mode' ) ); ?>"<?php echo RBFW_Function::needs_mode_selection() ? ' data-unconfirmed="1"' : ''; ?>>
 					<div class="rbfw-bm-head">
 						<h3><?php esc_html_e( 'Step 1 — Choose your booking flow', 'booking-and-rental-manager-for-woocommerce' ); ?></h3>
 						<p><?php esc_html_e( 'Pick exactly one flow to process bookings. This single switch decides everything below, so WooCommerce and Custom Payment never both try to handle the same booking. Your choice is saved instantly, and only the matching settings are shown.', 'booking-and-rental-manager-for-woocommerce' ); ?></p>
@@ -289,7 +961,12 @@
 					var saving = false;
 					$wrap.on('click', '.rbfw-bm-card:not(.is-disabled)', function(){
 						var $card = $(this), mode = $card.data('mode');
-						if (saving || $card.hasClass('is-selected')) { return; }
+						// Clicking the already-selected card is normally a no-op — EXCEPT while no
+						// choice has ever been stored (data-unconfirmed), when the card shown as
+						// selected is only the auto-resolved default. Clicking it then IS the admin
+						// confirming that default and must be persisted; otherwise the install stays
+						// "mode never chosen" forever and keeps being prompted for it.
+						if (saving || ($card.hasClass('is-selected') && !$wrap.data('unconfirmed'))) { return; }
 
 						// Remember the current selection so we can roll back on failure.
 						var $prev     = $wrap.find('.rbfw-bm-card.is-selected');
@@ -315,6 +992,9 @@
 						$.post(ajaxurl, { action:'rbfw_save_booking_mode', nonce:nonce, mode:mode })
 							.done(function(res){
 								if (res && res.success) {
+									// The choice is stored now, so the selected card goes back to
+									// being a no-op on click.
+									$wrap.removeAttr('data-unconfirmed').removeData('unconfirmed');
 									showToast('success', i18n.savedTitle, i18n.savedSub.replace('%s', modeLabel));
 
 									// Refresh the "no gateway enabled" warning for the newly active mode.
@@ -494,11 +1174,58 @@
 
 			/** PayPal / Stripe / Offline gateway cards + booking confirmation page. */
 			public function render_gateway_cards() {
+				$this->render_gateway_cards_list();
+
+				$conf_page = absint( $this->opt( 'rbfw_confirmation_page_id', 0 ) );
+				?>
+				<!-- Booking Confirmation Page -->
+				<?php $req_login = $this->opt( 'rbfw_require_login', 'on' ) !== 'off'; ?>
+				<div class="rbfw-conf-page">
+					<div class="rbfw-conf-page-label">
+						<label><?php esc_html_e( 'Require Account Login', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
+						<span><?php esc_html_e( 'Require customers to log in or register before booking. When on, guests see an inline Login / Register panel; when off, guest checkout is allowed and customers can track a booking with their email and reference.', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+					<div class="rbfw-conf-page-field">
+						<input type="hidden" name="<?php echo esc_attr( self::OPTION ); ?>[rbfw_require_login]" value="off">
+						<label class="rbfw-gw-switch"><input type="checkbox" name="<?php echo esc_attr( self::OPTION ); ?>[rbfw_require_login]" value="on" <?php checked( $req_login ); ?>><span class="rbfw-gw-slider"></span></label>
+					</div>
+				</div>
+
+				<div class="rbfw-conf-page">
+					<div class="rbfw-conf-page-label">
+						<label><?php esc_html_e( 'Booking Confirmation Page', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
+						<span><?php esc_html_e( 'In Standalone / Custom Payment mode, customers are shown a confirmation after booking. Optionally choose a dedicated page here.', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
+					</div>
+					<div class="rbfw-conf-page-field">
+						<?php
+							wp_dropdown_pages( array(
+								'name'              => self::OPTION . '[rbfw_confirmation_page_id]',
+								'id'                => 'rbfw_confirmation_page_id',
+								'selected'          => $conf_page,
+								'show_option_none'  => __( '— Default —', 'booking-and-rental-manager-for-woocommerce' ),
+								'option_none_value' => '0',
+							) );
+						?>
+					</div>
+				</div>
+				<?php
+			}
+
+			/**
+			 * The PayPal / Stripe / Offline gateway cards on their own, without the
+			 * Require Account Login / Booking Confirmation Page controls below them.
+			 *
+			 * Those two are classic Settings-API fields tied to the real Payments form
+			 * and only save on its submit, so they are deliberately left out of the
+			 * modern editor's Payment Method popup — which links out to the full tab
+			 * for them instead. Shared by render_gateway_cards() above and
+			 * render_payment_config_modal().
+			 */
+			public function render_gateway_cards_list() {
 				$is_pro      = $this->is_pro();
 				$pp_enabled  = $this->opt( 'rbfw_paypal_enable' ) === 'on';
 				$st_enabled  = $this->opt( 'rbfw_stripe_enable' ) === 'on';
 				$off_enabled = $this->opt( 'rbfw_offline_enable' ) === 'on';
-				$conf_page   = absint( $this->opt( 'rbfw_confirmation_page_id', 0 ) );
 
 				$enabled_txt  = __( 'Enabled', 'booking-and-rental-manager-for-woocommerce' );
 				$disabled_txt = __( 'Disabled', 'booking-and-rental-manager-for-woocommerce' );
@@ -581,37 +1308,6 @@
 						</div>
 					</div>
 				</div>
-
-				<!-- Booking Confirmation Page -->
-				<?php $req_login = $this->opt( 'rbfw_require_login', 'on' ) !== 'off'; ?>
-				<div class="rbfw-conf-page">
-					<div class="rbfw-conf-page-label">
-						<label><?php esc_html_e( 'Require Account Login', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
-						<span><?php esc_html_e( 'Require customers to log in or register before booking. When on, guests see an inline Login / Register panel; when off, guest checkout is allowed and customers can track a booking with their email and reference.', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
-					</div>
-					<div class="rbfw-conf-page-field">
-						<input type="hidden" name="<?php echo esc_attr( self::OPTION ); ?>[rbfw_require_login]" value="off">
-						<label class="rbfw-gw-switch"><input type="checkbox" name="<?php echo esc_attr( self::OPTION ); ?>[rbfw_require_login]" value="on" <?php checked( $req_login ); ?>><span class="rbfw-gw-slider"></span></label>
-					</div>
-				</div>
-
-				<div class="rbfw-conf-page">
-					<div class="rbfw-conf-page-label">
-						<label><?php esc_html_e( 'Booking Confirmation Page', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
-						<span><?php esc_html_e( 'In Standalone / Custom Payment mode, customers are shown a confirmation after booking. Optionally choose a dedicated page here.', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
-					</div>
-					<div class="rbfw-conf-page-field">
-						<?php
-							wp_dropdown_pages( array(
-								'name'              => self::OPTION . '[rbfw_confirmation_page_id]',
-								'id'                => 'rbfw_confirmation_page_id',
-								'selected'          => $conf_page,
-								'show_option_none'  => __( '— Default —', 'booking-and-rental-manager-for-woocommerce' ),
-								'option_none_value' => '0',
-							) );
-						?>
-					</div>
-				</div>
 				<?php
 			}
 
@@ -624,7 +1320,10 @@
 
 			/** WooCommerce install / activate modal (footer). */
 			public function render_wc_warning_modal() {
-				if ( ! $this->is_settings_screen() || $this->has_woo() ) {
+				// Also needed on the modern editor: the Payment Method popup embeds the
+				// same booking-flow selector, whose WooCommerce card carries the
+				// `.rbfw-install-wc-trigger` button that opens this modal.
+				if ( ! $this->is_settings_or_editor_screen() || $this->has_woo() ) {
 					return;
 				}
 				$is_installed = file_exists( WP_PLUGIN_DIR . '/woocommerce/woocommerce.php' );
@@ -730,7 +1429,10 @@
 
 			/** PayPal / Stripe / Offline Configure modals (footer). Pro-only for PayPal/Stripe. */
 			public function render_gateway_modals() {
-				if ( ! $this->is_settings_screen() ) {
+				// Also needed on the modern editor: the Payment Method popup embeds the
+				// same gateway cards (render_gateway_cards_list()), whose Configure
+				// buttons open these very modals.
+				if ( ! $this->is_settings_or_editor_screen() ) {
 					return;
 				}
 				$pp_enabled  = $this->opt( 'rbfw_paypal_enable' ) === 'on';
@@ -884,10 +1586,12 @@
 							</div>
 							<hr class="rbfw-gw-divider">
 							<div class="rbfw-gw-field">
-								<label class="rbfw-gw-label"><?php esc_html_e( 'Payment Label', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
+								<label class="rbfw-gw-label"><?php esc_html_e( 'Heading', 'booking-and-rental-manager-for-woocommerce' ); ?></label>
 								<input type="text" data-field="rbfw_offline_label" value="<?php echo $off_label; ?>" placeholder="<?php esc_attr_e( 'e.g. Pay on Pickup / Bank Transfer', 'booking-and-rental-manager-for-woocommerce' ); ?>">
-								<p style="margin:8px 0 0;font-size:12px;color:#6b7280;"><?php esc_html_e( 'This label is shown to customers on the frontend payment step.', 'booking-and-rental-manager-for-woocommerce' ); ?></p>
+								<p style="margin:8px 0 0;font-size:12px;color:#6b7280;"><?php esc_html_e( 'Shown above the payment choices on the frontend payment step.', 'booking-and-rental-manager-for-woocommerce' ); ?></p>
 							</div>
+							<hr class="rbfw-gw-divider">
+							<?php $this->render_offline_methods(); ?>
 						</div>
 						<div class="rbfw-gw-modal-footer">
 							<button type="button" class="rbfw-gw-save-btn" data-gateway="offline" style="background:linear-gradient(135deg,#0f766e,#115e59);"><?php esc_html_e( 'Save Offline Settings', 'booking-and-rental-manager-for-woocommerce' ); ?></button>
@@ -917,10 +1621,26 @@
 							var key=$(this).data('field');
 							fields[key]=($(this).attr('type')==='checkbox') ? ($(this).is(':checked')?'on':'off') : $(this).val();
 						});
+
+						// Offline payment types are a repeater, not flat data-field inputs, so
+						// they travel alongside `fields` rather than inside it.
+						var methods=[];
+						$box.find('.rbfw-pm-row').each(function(){
+							var $row=$(this);
+							var label=$.trim($row.find('.rbfw-pm-label').val()||'');
+							if(!label){ return; }   // unlabelled rows cannot be shown or reconciled
+							methods.push({
+								slug: $row.attr('data-slug')||'',
+								label: label,
+								instructions: $row.find('.rbfw-pm-instructions').val()||'',
+								enabled: $row.find('.rbfw-pm-enabled').is(':checked') ? 1 : 0
+							});
+						});
+
 						$btn.prop('disabled',true).css('opacity','0.7'); $msg.hide();
 						$.ajax({
 							url: ajaxurl, type:'POST',
-							data:{ action:'rbfw_save_gateway_settings', nonce:rbfwGateway.nonce, gateway:gateway, fields:fields },
+							data:{ action:'rbfw_save_gateway_settings', nonce:rbfwGateway.nonce, gateway:gateway, fields:fields, methods:methods },
 							success: function(res){
 								if(res.success){
 									$msg.css({'color':'#0f5132','background':'#d1e7dd','border':'1px solid #badbcc'}).text(res.data).fadeIn(200);
@@ -930,6 +1650,11 @@
 										var isEnabled = fields['rbfw_'+gateway+'_enable']==='on';
 										$badge.text(isEnabled?rbfwGateway.enabled:rbfwGateway.disabled).toggleClass('active',isEnabled);
 									}
+									// Everything else that answers "is a booking payable right
+									// now?" (the editor's Payment Method card, its banner, the
+									// no-gateway warning, the locked Custom Payment card) was
+									// rendered server-side and would stay stale until reload.
+									$(document).trigger('rbfw:payment-updated');
 								} else {
 									$msg.css({'color':'#842029','background':'#f8d7da','border':'1px solid #f5c2c7'}).text(res.data).fadeIn(200);
 									setTimeout(function(){ $msg.fadeOut(400); }, 1500);
@@ -949,7 +1674,12 @@
 
 			/** Mode-driven field visibility + gateway card styling (footer). */
 			public function payment_tabs_script() {
-				if ( ! $this->is_settings_screen() ) {
+				// Also needed on the modern editor so the popup's gateway cards get the
+				// same `.gateway-card` / `.rbfw-gw-*` styling defined below. The script
+				// further down early-returns as soon as it fails to find the settings
+				// table's own `tr.rbfw_booking_mode_selector` row, so the accordion and
+				// row-visibility logic never runs there.
+				if ( ! $this->is_settings_or_editor_screen() ) {
 					return;
 				}
 				$wc_active = $this->has_woo() ? 'true' : 'false';
@@ -1178,14 +1908,33 @@
 					wp_send_json_error( __( 'This gateway is available in the Pro version.', 'booking-and-rental-manager-for-woocommerce' ) );
 				}
 
+				// Offline payment types (the repeater in that gateway's modal). Only accepted
+				// for the offline gateway, and only when the repeater was actually posted —
+				// an absent key must leave the stored list alone rather than wipe it.
+				if ( 'offline' === $gateway && isset( $_POST['methods'] ) ) {
+					$raw = wp_unslash( $_POST['methods'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized field-by-field in sanitize_payment_methods().
+					$existing['rbfw_payment_methods'] = self::sanitize_payment_methods( is_array( $raw ) ? $raw : array() );
+				}
+
 				$toggles = array( 'rbfw_paypal_enable', 'rbfw_paypal_sandbox', 'rbfw_stripe_enable', 'rbfw_stripe_sandbox', 'rbfw_offline_enable' );
 				foreach ( $allowed[ $gateway ] as $key ) {
-					$val = isset( $fields[ $key ] ) ? $fields[ $key ] : 'off';
 					if ( in_array( $key, $toggles, true ) ) {
+						// An unchecked checkbox posts nothing, so absent genuinely means "off".
+						$val              = isset( $fields[ $key ] ) ? $fields[ $key ] : 'off';
 						$existing[ $key ] = ( 'on' === $val ) ? 'on' : 'off';
-					} else {
-						$existing[ $key ] = sanitize_text_field( $val );
+						continue;
 					}
+
+					// Text fields are a different story: absent means "not submitted", NOT
+					// "empty". This previously fell through to the same 'off' default and
+					// wrote the literal string "off" into the field — which is how a partial
+					// save could turn the Offline heading into "off", and would just as
+					// happily have overwritten a Stripe or PayPal API key with it. Leave a
+					// field that was not posted exactly as it was stored.
+					if ( ! isset( $fields[ $key ] ) ) {
+						continue;
+					}
+					$existing[ $key ] = sanitize_text_field( $fields[ $key ] );
 				}
 
 				update_option( self::OPTION, $existing );
@@ -1207,7 +1956,7 @@
 				// The choice is only meaningful when both systems are available; otherwise the
 				// mode is auto-resolved and shouldn't be overridden.
 				if ( class_exists( 'RBFW_Function' ) && 'both' !== RBFW_Function::mode_availability() ) {
-					wp_send_json_error( __( 'Booking mode can only be changed when both WooCommerce and the Pro custom gateways are available.', 'booking-and-rental-manager-for-woocommerce' ) );
+					wp_send_json_error( __( 'Booking mode can only be changed while both flows are usable: WooCommerce active, and at least one custom payment method (Offline, or a Pro gateway) enabled.', 'booking-and-rental-manager-for-woocommerce' ) );
 				}
 
 				RBFW_Function::set_booking_mode( $mode );
@@ -1280,6 +2029,10 @@
 					'rbfw_stripe_enable', 'rbfw_stripe_sandbox', 'rbfw_stripe_test_pub', 'rbfw_stripe_test_sec',
 					'rbfw_stripe_live_pub', 'rbfw_stripe_live_sec',
 					'rbfw_offline_enable', 'rbfw_offline_label',
+					// Offline payment types live in that gateway's modal and save over AJAX,
+					// so they never travel with the settings form — without this, saving any
+					// other field on the Payments tab would silently wipe the whole list.
+					'rbfw_payment_methods',
 				);
 				if ( ! is_array( $new_value ) ) {
 					return $new_value;
