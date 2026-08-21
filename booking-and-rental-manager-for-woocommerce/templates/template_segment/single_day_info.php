@@ -8,7 +8,9 @@ global $rbfw;
 check_ajax_referer( $ajax_action, 'nonce' );
 
 if(isset($_POST['post_id'])){
-    $id = isset($_POST['post_id']) ? sanitize_text_field(wp_unslash($_POST['post_id'])) : '';
+    // The nonce proves the request came from one of our pages, not that this
+    // particular item may be read. Authorise the ID before touching its meta.
+    $id = rbfw_ajax_item_id( 'post_id' );
 
     $selected_time = isset($_POST['selected_time']) ? sanitize_text_field(wp_unslash($_POST['selected_time'])) : '';
 
@@ -123,7 +125,7 @@ if(isset($_POST['post_id'])){
     $manage_inventory_as_timely =  get_post_meta($id, 'manage_inventory_as_timely', true) ? get_post_meta($id, 'manage_inventory_as_timely', true) : 'off';
     $enable_specific_duration =  get_post_meta($id, 'enable_specific_duration', true) ? get_post_meta($id, 'enable_specific_duration', true) : 'off';
     $rbfw_time_slot_switch = !empty(get_post_meta($id,'rbfw_time_slot_switch',true)) ? get_post_meta($id,'rbfw_time_slot_switch',true) : 'off';
-    $available_times = get_post_meta($id, 'rdfw_available_time', true) ? maybe_unserialize(get_post_meta($id, 'rdfw_available_time', true)) : [];
+    $available_times = get_post_meta($id, 'rdfw_available_time', true) ? rbfw_safe_unserialize(get_post_meta($id, 'rdfw_available_time', true)) : [];
 
 
     if($rbfw_time_slot_switch == 'on' && !empty($available_times) && ($manage_inventory_as_timely=='on' && $enable_specific_duration =='off') ){
@@ -463,7 +465,9 @@ if(isset($_POST['post_id'])){
                     <ul class="rbfw-ul">
                         <li class="duration-costing rbfw-cond">
                             <?php echo esc_html__( 'Duration Cost','booking-and-rental-manager-for-woocommerce' ); ?>
-                            <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            <span class="price-figure">
+                                <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            </span>
                         </li>
 
                         <?php
@@ -489,18 +493,24 @@ if(isset($_POST['post_id'])){
                             <?php // Carries both class names: different scripts target this row by each of them. ?>
                             <li class="resource-costing extra_service_cost rbfw-cond" style="display: none">
                                 <?php echo esc_html__( 'Resource Cost','booking-and-rental-manager-for-woocommerce' ); ?>
-                                <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                                <span class="price-figure">
+                                    <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                                </span>
                             </li>
                         <?php } ?>
 
                         <li class="variation-costing rbfw-cond" style="display: none">
                             <?php echo esc_html__( 'Variations','booking-and-rental-manager-for-woocommerce' ); ?>
-                            <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            <span class="price-figure">
+                                <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            </span>
                         </li>
 
                         <li class="subtotal">
                             <?php echo esc_html__( 'Subtotal','booking-and-rental-manager-for-woocommerce' ); ?>
-                            <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            <span class="price-figure">
+                                <?php echo wp_kses(wc_price(0),rbfw_allowed_html()); ?>
+                            </span>
                         </li>
 
                         <?php // Tax the item is configured for, as WooCommerce will charge it. ?>
