@@ -6,8 +6,12 @@ if (!class_exists('RBFW_Woocommerce')) {
     class RBFW_Woocommerce
     {
 
-        public function __construct()
+        public function __construct( $register_hooks = true )
         {
+            if ( ! $register_hooks ) {
+                return;
+            }
+
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_validate_booking_nonce'), 4, 2 );
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_block_add_to_cart_when_standalone'), 5, 2 );
             add_filter( 'woocommerce_add_to_cart_validation', array($this , 'rbfw_prevent_duplicate_cart_item'), 10, 2 );
@@ -403,16 +407,23 @@ if (!class_exists('RBFW_Woocommerce')) {
             }
 
             // Other lines for the same item already in the cart compete for the stock.
-            $siblings = array();
+            // $cart_lines carries every rental line: with Multiple Items shared
+            // inventory a line for a DIFFERENT item can hold the same units.
+            $siblings   = array();
+            $cart_lines = array();
             if ( function_exists( 'WC' ) && WC()->cart ) {
                 foreach ( WC()->cart->get_cart() as $ci ) {
-                    if ( isset( $ci['rbfw_id'] ) && (int) $ci['rbfw_id'] === (int) $rbfw_id ) {
+                    if ( ! isset( $ci['rbfw_id'] ) ) {
+                        continue;
+                    }
+                    $cart_lines[] = $ci;
+                    if ( (int) $ci['rbfw_id'] === (int) $rbfw_id ) {
                         $siblings[] = $ci;
                     }
                 }
             }
 
-            $checks  = rbfw_check_rental_availability( $rbfw_id, $values, $siblings );
+            $checks  = rbfw_check_rental_availability( $rbfw_id, $values, $siblings, $cart_lines );
             $blocked = false;
             foreach ( $checks as $check ) {
                 if ( empty( $check['ok'] ) ) {
@@ -533,6 +544,10 @@ if (!class_exists('RBFW_Woocommerce')) {
             }
 
             $seen = array(); // rbfw_id => array of already-validated line values (siblings)
+            // Every line validated so far, regardless of item: Multiple Items shared
+            // inventory lets two different items draw on one pool, so the running
+            // total has to be cart-wide, not per item.
+            $processed = array();
 
             foreach ( WC()->cart->get_cart() as $values ) {
                 $rbfw_id = isset( $values['rbfw_id'] ) ? $values['rbfw_id'] : 0;
@@ -541,7 +556,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
 
                 $siblings = isset( $seen[ $rbfw_id ] ) ? $seen[ $rbfw_id ] : array();
-                $checks   = rbfw_check_rental_availability( $rbfw_id, $values, $siblings );
+                $checks   = rbfw_check_rental_availability( $rbfw_id, $values, $siblings, $processed );
                 foreach ( $checks as $check ) {
                     if ( empty( $check['ok'] ) ) {
                         wc_add_notice( $this->rbfw_availability_notice( $check ), 'error' );
@@ -549,6 +564,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
 
                 $seen[ $rbfw_id ][] = $values;
+                $processed[]        = $values;
             }
         }
 
@@ -641,6 +657,15 @@ if (!class_exists('RBFW_Woocommerce')) {
             return $billing;
         }
 
+        /**
+         * Rebuild the chosen Multiple Items lines from the stored configuration.
+         *
+         * @param int    $rbfw_id         Multiple Items rental id.
+         * @param array  $submitted_items Posted rows (quantities only are trusted).
+         * @param string $duration_type   hourly|daily|weekly|monthly.
+         * @param int    $duration_qty    Number of those units.
+         * @return array{items:array,total:float}
+         */
         private function rbfw_prepare_multi_items_from_post( $rbfw_id, $submitted_items, $duration_type, $duration_qty ) {
             $stored_items = get_post_meta( $rbfw_id, 'multiple_items_info', true );
             $stored_items = is_array( $stored_items ) ? $stored_items : array();
@@ -666,12 +691,22 @@ if (!class_exists('RBFW_Woocommerce')) {
                     $quantity = min( $quantity, $available );
                 }
 
+                /* Shared inventory: record which existing rental item this row draws
+                   from. Deliberately NOT clamped to the shared pool here — silently
+                   shrinking the line would hide the problem from the customer. The
+                   requested quantity is carried through so rbfw_check_rental_availability()
+                   can reject it at add-to-cart with a real "only N left" notice. */
+                $source_id = function_exists( 'rbfw_mi_row_source_id' ) ? rbfw_mi_row_source_id( $stored_item ) : 0;
+
                 $unit_price = isset( $stored_item[ $price_key ] ) ? (float) $stored_item[ $price_key ] : 0;
                 $total     += $unit_price * $quantity * $billing['multiplier'];
                 $items[]    = array(
                     'item_name'  => isset( $stored_item['item_name'] ) ? sanitize_text_field( $stored_item['item_name'] ) : '',
                     'item_qty'   => $quantity,
                     'item_price' => $unit_price,
+                    /* Stored on the line so the source item can be identified later even
+                       if the row is renamed or unlinked. 0 for a private-stock row. */
+                    'source_id'  => $source_id,
                 );
             }
 
@@ -781,13 +816,15 @@ if (!class_exists('RBFW_Woocommerce')) {
             );
         }
 
-        public function rbfw_add_cart_item_func( $cart_item_data, $rbfw_id ) {
+        public function rbfw_add_cart_item_func( $cart_item_data, $rbfw_id, $request_data = null ) {
 
-            if ( ! ( isset( $_POST['nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'rbfw_ajax_action' ) ) ) {
+            $request_data = is_array( $request_data ) ? $request_data : $_POST;
+
+            if ( ! ( isset( $request_data['nonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $request_data['nonce'] ) ), 'rbfw_ajax_action' ) ) ) {
                 return;
             }
 
-            $sd_input_data_sabitized = RBFW_Function::data_sanitize( $_POST );
+            $sd_input_data_sabitized = RBFW_Function::data_sanitize( wp_unslash( $request_data ) );
             $rbfw_rent_type     = get_post_meta( $rbfw_id, 'rbfw_item_type', true );
 
             $_raw = get_post_meta( $rbfw_id, 'rbfw_enable_extra_service_qty', true );
@@ -935,8 +972,8 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $rbfw_bikecarsd_selected_date = isset( $sd_input_data_sabitized['rbfw_bikecarsd_selected_date'] ) ? $sd_input_data_sabitized['rbfw_bikecarsd_selected_date'] : '';
                 $bikecarsd_selected_date      = isset( $sd_input_data_sabitized['rbfw_bikecarsd_selected_date'] ) ? $sd_input_data_sabitized['rbfw_bikecarsd_selected_date'] : '';
                 $rbfw_bikecarsd_selected_time = isset( $sd_input_data_sabitized['rbfw_start_time'] ) ? $sd_input_data_sabitized['rbfw_start_time'] : '';
-                $end_date = isset( $_POST['rbfw_end_date'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_end_date'] ) ) : '';
-                $end_time = isset( $_POST['rbfw_end_time'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_end_time'] ) ) : '';
+                $end_date = isset( $sd_input_data_sabitized['rbfw_end_date'] ) ? sanitize_text_field( $sd_input_data_sabitized['rbfw_end_date'] ) : '';
+                $end_time = isset( $sd_input_data_sabitized['rbfw_end_time'] ) ? sanitize_text_field( $sd_input_data_sabitized['rbfw_end_time'] ) : '';
                 if ( ! ( $end_date && $end_time ) ) {
                     $end_date = $bikecarsd_selected_date;
                 }
@@ -1157,8 +1194,8 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $start_date                = isset( $sd_input_data_sabitized['rbfw_pickup_start_date'] ) ? $sd_input_data_sabitized['rbfw_pickup_start_date'] : '';
                 $start_time                = isset( $sd_input_data_sabitized['rbfw_pickup_start_time'] ) ? $sd_input_data_sabitized['rbfw_pickup_start_time'] : '';
                 $pickup_datetime           = gmdate( 'Y-m-d H:i', strtotime( $start_date . ' ' . $start_time ) );
-                $durationType = isset($_POST['durationType'])?sanitize_text_field(wp_unslash($_POST['durationType'])):'';
-                $durationQty = isset($_POST['durationQty'])?max( 1, absint(sanitize_text_field(wp_unslash($_POST['durationQty'])))):1;
+                $durationType = isset( $sd_input_data_sabitized['durationType'] ) ? sanitize_text_field( $sd_input_data_sabitized['durationType'] ) : '';
+                $durationQty  = isset( $sd_input_data_sabitized['durationQty'] ) ? max( 1, absint( $sd_input_data_sabitized['durationQty'] ) ) : 1;
                 if ( ! in_array( $durationType, array( 'hourly', 'daily', 'weekly', 'monthly' ), true ) ) {
                     $durationType = 'daily';
                 }
@@ -3014,8 +3051,7 @@ if (!class_exists('RBFW_Woocommerce')) {
         }
 
     }
-    new RBFW_Woocommerce();
+    if ( RBFW_Function::has_woocommerce() ) {
+        new RBFW_Woocommerce();
+    }
 }
-
-
-

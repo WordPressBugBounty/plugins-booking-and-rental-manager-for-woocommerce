@@ -123,16 +123,24 @@ if ( ! class_exists( 'RBFW_Native_Checkout' ) ) {
 			$item_type   = get_post_meta( $item_id, 'rbfw_item_type', true );
 			$dates       = $this->extract_dates( $item_type );
 			$quantity    = isset( $_POST['rbfw_item_quantity'] ) ? absint( wp_unslash( $_POST['rbfw_item_quantity'] ) ) : 1;
-			$ticket_info = $this->build_ticket_info( $item_type, $dates, $quantity );
+			$ticket_info = $this->build_ticket_info( $item_type, $dates, $quantity, $item_id );
 
-			// 6. Total — computed live on the frontend and posted back. Phase 1 trusts the
-			// sanitized value; server-side recomputation/validation lands with the payment phase.
-			$subtotal = isset( $_POST['rbfw_total'] ) ? (float) preg_replace( '/[^0-9.]/', '', wp_unslash( $_POST['rbfw_total'] ) ) : 0.0;
-			$subtotal = max( 0, $subtotal );
+			// 6. Rebuild the rental price from the item's stored pricing configuration. The
+			// browser total is display-only and must never be used as a payment authority.
+			$quote = RBFW_Native_Quote::build( $item_id, $raw );
+			if ( is_wp_error( $quote ) ) {
+				wp_send_json_error( array( 'message' => $quote->get_error_message() ) );
+			}
+			$subtotal = $quote['subtotal'];
+
+			// Everything downstream — the coupon context, add-on pricing filters, and the copy of
+			// the payload stored on the booking — reads from $raw. Overwrite every money and
+			// billed-duration echo it carries with the authoritative figures FIRST, so none of
+			// them can still speak for the customer's browser.
+			$raw = RBFW_Native_Quote::sanitize_payload( $raw, $quote );
 
 			// 6a. Delivery & Collection. Resolved from the stored bands, NOT from the posted
-			// total, and added on top — so this charge is correct even though the base subtotal
-			// above is still client-derived. A distance the shop refuses (beyond the configured
+			// total, and added on top. A distance the shop refuses (beyond the configured
 			// maximum, or in no band) stops the booking here rather than letting it through
 			// with the delivery silently dropped.
 			$delivery_total = 0.0;
@@ -166,15 +174,18 @@ if ( ! class_exists( 'RBFW_Native_Checkout' ) ) {
 			// 6b. Coupon — ALWAYS authoritative server-side. Only the coupon CODE is accepted from
 			// the client; the discount value is recomputed from the coupon's own configuration, so a
 			// tampered `rbfw_coupon_discount` in the POST is ignored entirely. Automatic (no-code)
-			// rules resolve here too. (The base subtotal above remains client-derived — that is the
-			// pre-existing gap noted at step 6 and is unchanged by this feature.)
+			// rules resolve here too. The pricing aliases in $raw were replaced with the
+			// authoritative quote above, so spend and free-day rules cannot trust client prices.
 			$coupon_code     = '';
 			$coupon_discount = 0.0;
 			$coupon_applied  = array();
 
 			if ( class_exists( 'RBFW_Coupon_Engine' ) && RBFW_Coupon_Engine::is_enabled() ) {
 				$posted_code = isset( $_POST['rbfw_coupon_code'] ) ? sanitize_text_field( wp_unslash( $_POST['rbfw_coupon_code'] ) ) : '';
-				$ctx         = RBFW_Coupon_Context::from_native_post( $raw );
+				// Built from the QUOTE, not the payload: the free_days rate is
+				// duration_price / duration_units, and both sides of that division have to be
+				// server-computed or a forged duration turns one free day into a free booking.
+				$ctx         = RBFW_Coupon_Context::from_native_quote( $item_id, $quote, $email );
 				$resolution  = RBFW_Coupon_Engine::resolve( $ctx, $posted_code );
 
 				// A code was typed but is not (or no longer) valid — refuse rather than silently
@@ -299,9 +310,14 @@ if ( ! class_exists( 'RBFW_Native_Checkout' ) ) {
 
 		/**
 		 * Build the inventory ticket_info array consumed by rbfw_create_inventory_meta().
+		 *
+		 * @param string $item_type rbfw_item_type of the booked item.
+		 * @param array  $dates     Resolved start/end date and time.
+		 * @param int    $quantity  Units booked.
+		 * @param int    $item_id   The rental item, needed to rebuild sub-item lines.
 		 */
-		private function build_ticket_info( $item_type, $dates, $quantity ) {
-			return array(
+		private function build_ticket_info( $item_type, $dates, $quantity, $item_id = 0 ) {
+			$ticket_info = array(
 				'rbfw_start_date'    => $dates['start_date'],
 				'rbfw_end_date'      => $dates['end_date'],
 				'rbfw_start_time'    => $dates['start_time'],
@@ -312,6 +328,61 @@ if ( ! class_exists( 'RBFW_Native_Checkout' ) ) {
 				'rbfw_service_info'  => array(),
 				'rbfw_service_infos' => array(),
 			);
+
+			/* Multiple Items: record which sub-items were chosen, or the booking holds
+			   no sub-item stock at all in Standalone mode — neither the row's own
+			   counter nor a shared pool it is linked to. */
+			if ( 'multiple_items' === $item_type && $item_id ) {
+				$ticket_info['multiple_items_info'] = $this->build_multi_items_lines( $item_id );
+			}
+
+			return $ticket_info;
+		}
+
+		/**
+		 * Rebuild the chosen Multiple Items lines from the stored configuration.
+		 *
+		 * Only the posted quantities are trusted; names, prices and the shared-inventory
+		 * link are read back from the item's own meta.
+		 *
+		 * @param int $item_id Multiple Items rental id.
+		 * @return array
+		 */
+		private function build_multi_items_lines( $item_id ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the caller verified the checkout nonce.
+			$submitted = isset( $_POST['multiple_items_info'] ) ? RBFW_Function::data_sanitize( wp_unslash( $_POST['multiple_items_info'] ) ) : array();
+			if ( ! is_array( $submitted ) ) {
+				return array();
+			}
+
+			$stored = get_post_meta( $item_id, 'multiple_items_info', true );
+			$stored = is_array( $stored ) ? $stored : array();
+			$lines  = array();
+
+			foreach ( $submitted as $key => $row ) {
+				$row_key = absint( $key );
+				if ( ! isset( $stored[ $row_key ] ) || ! is_array( $stored[ $row_key ] ) ) {
+					continue;
+				}
+				$qty = ( is_array( $row ) && isset( $row['item_qty'] ) ) ? absint( $row['item_qty'] ) : 0;
+				if ( $qty < 1 ) {
+					continue;
+				}
+
+				$stored_row = $stored[ $row_key ];
+				$cap        = isset( $stored_row['available_qty'] ) ? absint( $stored_row['available_qty'] ) : 0;
+				if ( $cap > 0 ) {
+					$qty = min( $qty, $cap );
+				}
+
+				$lines[] = array(
+					'item_name' => isset( $stored_row['item_name'] ) ? (string) $stored_row['item_name'] : '',
+					'item_qty'  => $qty,
+					'source_id' => function_exists( 'rbfw_mi_row_source_id' ) ? rbfw_mi_row_source_id( $stored_row ) : 0,
+				);
+			}
+
+			return $lines;
 		}
 	}
 	new RBFW_Native_Checkout();

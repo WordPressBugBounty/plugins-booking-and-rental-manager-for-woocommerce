@@ -36,6 +36,9 @@ if ( is_admin() ) {
 	require_once RBFW_PLUGIN_DIR . '/admin/settings/RBFW_Delivery_Settings.php';
 }
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_inventory_functions.php';
+// Shared inventory for Multiple Items rows linked to an existing rental item.
+// Loaded right after the inventory engine, whose counters it extends.
+require_once RBFW_PLUGIN_DIR . '/inc/rbfw_shared_inventory.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_dynamic_css.php';
 require_once RBFW_PLUGIN_DIR . '/inc/class-resort-function.php';
 require_once RBFW_PLUGIN_DIR . '/inc/rbfw_shortcodes.php';
@@ -44,6 +47,10 @@ require_once RBFW_PLUGIN_DIR . '/inc/rbfw_booking_search.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-pro-page.php';
 require_once RBFW_PLUGIN_DIR . '/lib/classes/class-welcome-page.php';
 require_once RBFW_PLUGIN_DIR . '/inc/class-bike-car-sd-function.php';
+
+// Authoritative standalone price quote. Loaded in EVERY mode: the coupon context is too,
+// and it must never be left without a server-side price to fall back on.
+require_once RBFW_PLUGIN_DIR . '/inc/booking/RBFW_Native_Quote.php';
 
 // ---- Unified coupon engine (mode-agnostic core; loads in every mode) ----
 require_once RBFW_PLUGIN_DIR . '/inc/coupon/RBFW_Coupon_Post_Type.php';
