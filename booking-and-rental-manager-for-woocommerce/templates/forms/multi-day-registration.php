@@ -424,10 +424,6 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? rbfw_s
                                 <i class="fas fa-lock"></i>
                                 <span><?php esc_html_e( 'Secure payment', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
                             </div>
-                            <div class="rbfw-sd-trust-item">
-                                <i class="far fa-calendar-times"></i>
-                                <span><?php esc_html_e( 'Free cancellation', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
-                            </div>
                         </div>
                     </div>
 
@@ -467,6 +463,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? rbfw_s
 
                     <input type="hidden" name="rbfw_off_days" id="rbfw_off_days"  value='<?php echo esc_attr(rbfw_off_days($post_id)); ?>'>
                     <input type="hidden" name="rbfw_offday_range" id="rbfw_offday_range"  value='<?php echo esc_attr(rbfw_off_dates($post_id)); ?>'>
+					<input type="hidden" id="rbfw_global_offday_range" value='<?php echo esc_attr( rbfw_global_off_dates() ); ?>'>
                     <input type="hidden" id="rbfw_block_offday_booking" value="<?php echo esc_attr(rbfw_block_offday_range_booking($post_id)); ?>">
 
                     <?php if($rbfw_enable_start_end_date == 'yes'){ ?>
@@ -960,5 +957,4 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? rbfw_s
         </form>
     </div>
 </div>
-
 

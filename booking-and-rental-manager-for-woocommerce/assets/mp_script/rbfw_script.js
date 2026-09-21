@@ -167,24 +167,26 @@ jQuery(document).on('click','.rbfw_bikecarsd_time:not(.rbfw_bikecarsd_time.disab
 /**
  * Per-item "Block Booking If Date Range Contains Off Days" flag, printed as a
  * hidden input by the booking form templates. Items saved before the flag
- * existed have no input / an empty value — both count as enabled.
+ * existed have no input / an empty value, so item-level range blocking is off.
  *
- * The flag gates ONLY rule 3 (a pickup→return range may not span an off day).
- * Off days / off dates themselves stay unselectable as pickup or return
- * regardless of the flag — that is the plugin's normal off-day behavior.
+ * The per-item flag gates rule 3 (a pickup→return range may not span an item
+ * off day). A configured global closure always enables the same range gate.
+ * Off days / off dates themselves stay unselectable as pickup or return.
  */
 function rbfw_offday_blocking_enabled() {
     var $flag = jQuery('#rbfw_block_offday_booking');
-    // Opt-in: interior-range blocking only when the admin explicitly turned it
-    // on. A missing flag or any non-'on' value means blocking stays off.
-    return $flag.length > 0 && $flag.val() === 'on';
+    var globalOffDates = [];
+    try { globalOffDates = JSON.parse(jQuery('#rbfw_global_offday_range').val()) || []; } catch (e) {}
+    // Per-item interior blocking remains opt-in. Global closures always block
+    // an overlapping rental, even when both selected endpoints are outside it.
+    return ($flag.length > 0 && $flag.val() === 'on') || globalOffDates.length > 0;
 }
 
 /**
- * Rule 3 of the off-day blocking feature: true when any weekly off day or off
- * date range falls strictly BETWEEN the selected pickup date and a candidate
- * return date. The endpoints themselves are covered by rules 1–2 (the normal
- * off-day disable in rbfw_off_day_dates), so only the interior is scanned.
+ * Rule 3 of the off-day blocking feature: true when an applicable off date
+ * falls strictly BETWEEN the selected pickup date and a candidate return date.
+ * Global closures always apply; item rules apply only when their toggle is on.
+ * Endpoints are covered by rbfw_off_day_dates(), so only the interior is scanned.
  *
  * @param {string} pickup_iso Selected pickup date, YYYY-MM-DD.
  * @param {Date}   end_date   Candidate return date from beforeShowDay.
@@ -192,10 +194,13 @@ function rbfw_offday_blocking_enabled() {
 function rbfw_range_contains_off_day(pickup_iso, end_date) {
     if (!pickup_iso) return false;
 
-    var off_days = [], offday_range = [];
+    var off_days = [], offday_range = [], global_offday_range = [];
     try { off_days     = JSON.parse(jQuery('#rbfw_off_days').val())     || []; } catch (e) {}
     try { offday_range = JSON.parse(jQuery('#rbfw_offday_range').val()) || []; } catch (e) {}
-    if (!off_days.length && !offday_range.length) return false;
+    try { global_offday_range = JSON.parse(jQuery('#rbfw_global_offday_range').val()) || []; } catch (e) {}
+    if (!off_days.length && !offday_range.length && !global_offday_range.length) return false;
+
+    var itemRangeBlocking = jQuery('#rbfw_block_offday_booking').val() === 'on';
 
     var weekday = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
     var d = new Date(pickup_iso + 'T00:00:00');
@@ -205,9 +210,12 @@ function rbfw_range_contains_off_day(pickup_iso, end_date) {
     var end = new Date(end_date.getFullYear(), end_date.getMonth(), end_date.getDate());
     var guard = 0; // hard cap so a corrupt date can never loop forever
     while (d < end && guard++ < 1100) {
-        if (jQuery.inArray(weekday[d.getDay()], off_days) >= 0) return true;
         var ddmmyyyy = ("0" + d.getDate()).slice(-2) + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + d.getFullYear();
-        if (jQuery.inArray(ddmmyyyy, offday_range) >= 0) return true;
+        if (jQuery.inArray(ddmmyyyy, global_offday_range) >= 0) return true;
+        if (itemRangeBlocking && (
+            jQuery.inArray(weekday[d.getDay()], off_days) >= 0 ||
+            jQuery.inArray(ddmmyyyy, offday_range) >= 0
+        )) return true;
         d.setDate(d.getDate() + 1);
     }
     return false;
@@ -247,11 +255,13 @@ function rbfw_off_day_dates(date,type='',today_enable='no',dropoff=null){
     var rbfw_off_days = JSON.parse(jQuery("#rbfw_off_days").val());
 
     var rbfw_offday_range = JSON.parse(jQuery("#rbfw_offday_range").val());
+    var rbfw_global_offday_range = [];
+    try { rbfw_global_offday_range = JSON.parse(jQuery("#rbfw_global_offday_range").val()) || []; } catch (e) {}
 
 
 
 
-    if(jQuery.inArray( day_in, rbfw_off_days )>= 0 || jQuery.inArray( date_in, rbfw_offday_range )>= 0 || (date <  date_today) ){
+    if(jQuery.inArray( day_in, rbfw_off_days )>= 0 || jQuery.inArray( date_in, rbfw_offday_range )>= 0 || jQuery.inArray( date_in, rbfw_global_offday_range )>= 0 || (date <  date_today) ){
 
         if(type=='md'){
             if((date <  date_today)){
@@ -344,11 +354,37 @@ function rbfwTimeToMinutes(t) {
     return h * 60 + m;
 }
 
+// Parse a stored time string — "17:00" (24h) or "5:00 PM" (12h, any am/pm
+// casing) — into 24-hour {hours, minutes}. Returns null for anything
+// unparsable so callers can skip the slot instead of rendering "NaN:NaN am"
+// (the old split(":")/split(" ") parsing produced NaN minutes on 12-hour
+// values like "5:00 PM" and on other unexpected formats).
+function rbfwParseTimeParts(t) {
+    if (t === undefined || t === null) return null;
+    var s = String(t).trim().toLowerCase();
+    if (!s) return null;
+    var ampm = s.match(/\s*(am|pm)$/);
+    var clean = s.replace(/\s*(am|pm)$/, '').trim();
+    var parts = clean.split(':');
+    if (parts.length < 1 || parts.length > 2) return null;
+    var h = parseInt(parts[0], 10);
+    var m = (parts.length === 2) ? parseInt(parts[1], 10) : 0;
+    if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+    if (ampm) {
+        if (ampm[1] === 'pm' && h !== 12) h += 12;  // "12:xx pm" stays 12
+        if (ampm[1] === 'am' && h === 12) h = 0;    // "12:xx am" -> 00
+    }
+    return { hours: h, minutes: m };
+}
+
 function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_particular,is_calendar=null) {
 
     // Fall back to 0 when the buffer field is absent/empty: NaN here would make
     // setHours() below produce an Invalid Date, silently disabling the past-time check.
     var rbfw_buffer_time = parseInt(jQuery("#rbfw_buffer_time").val()) || 0;
+    // Tooltips for unbookable slots: already started vs still inside the buffer window.
+    var rbfw_past_time_label = (typeof rbfw_translation !== 'undefined' && rbfw_translation.past_time) ? rbfw_translation.past_time : 'Past Time';
+    var rbfw_buffer_time_label = (typeof rbfw_translation !== 'undefined' && rbfw_translation.not_available) ? rbfw_translation.not_available : 'Not available';
 
 
     var scheduleJson = [];
@@ -434,6 +470,12 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
             specific_available_time.forEach(timeObj => {
                 if (timeObj.status === "enabled") {
 
+                    // Slot values may be stored as "H:i" (24h) or "h:i A" (12h).
+                    // Parse once, robustly; skip the entry entirely when it cannot
+                    // be parsed instead of rendering "NaN:NaN am".
+                    var slot_time = rbfwParseTimeParts(timeObj.time);
+                    if (!slot_time) { return; }
+
                     let current_date_time = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));// new Date();
                     let actual_booking_date_time_format = new Date(current_date_time);
                     actual_booking_date_time_format.setHours(current_date_time.getHours() + rbfw_buffer_time);
@@ -444,17 +486,16 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                     let selectedDateStr = selectedDate.toISOString().split("T")[0];
 
                     if (selectedDateStr === actual_booking_date) {
-                        // Parse available_time into a Date object for comparison
-                        let [hours, minutes] = timeObj.time.split(":").map(Number);
-                        //et timeDate = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));
-                        actual_booking_date_time_format.setHours(hours, minutes, 0, 0);
+                        // Compare against the slot time (already parsed to 24h above)
+                        actual_booking_date_time_format.setHours(slot_time.hours, slot_time.minutes, 0, 0);
 
                         console.log('actual_booking_date_time_format',actual_booking_date_time_format);
                         // console.log('timeDate',timeDate);
 
                         if (actual_booking_date_time >= actual_booking_date_time_format) {
                             time_enable = true;
-                            past_time = 'Past time';
+                            // Already started = past; still ahead but inside the buffer window = not bookable yet.
+                            past_time = (current_date_time >= actual_booking_date_time_format) ? rbfw_past_time_label : rbfw_buffer_time_label;
                         }else{
                             time_enable = false;
                             past_time = '';
@@ -462,15 +503,10 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                     }
 
 
-                    let myTime = timeObj.time;
-
-                    // Split into hours and minutes
-                    let [hours, minutes] = myTime.split(":").map(Number);
-
                     // Create a JS Date object for formatting
                     let date = new Date();
-                    date.setHours(hours);
-                    date.setMinutes(minutes);
+                    date.setHours(slot_time.hours);
+                    date.setMinutes(slot_time.minutes);
 
                     sapecific_date_time = true;
 
@@ -479,7 +515,7 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                         const a = document.createElement("a");
                         if(time_enable){
                             a.className = "rbfw_bikecarsd_time_disable";
-                            a.title = "Past Time";
+                            a.title = past_time;
                         }else{
                             a.className = "rbfw_bikecarsd_time";
                         }
@@ -499,6 +535,8 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                         option.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;
                         option.disabled = time_enable;
                         option.title = past_time;
+                        // sd_script.js must not re-enable this slot when it refreshes sold-out state.
+                        if (time_enable) { option.setAttribute('data-rbfw-time-blocked', '1'); }
                         timeSelect.appendChild(option);
                     }
                 }
@@ -510,6 +548,11 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
         rdfw_available_timeJson.forEach(timeObj => {
             if (timeObj.status === "enabled") {
 
+                // Slot values may be stored as "H:i" (24h) or "h:i A" (12h).
+                // Parse once, robustly; skip the entry entirely when it cannot
+                // be parsed instead of rendering "NaN:NaN am".
+                var slot_time = rbfwParseTimeParts(timeObj.time);
+                if (!slot_time) { return; }
 
                 let current_date_time = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));// new Date();
                 let actual_booking_date_time_format = new Date(current_date_time);
@@ -521,17 +564,16 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                 let selectedDateStr = selectedDate.toISOString().split("T")[0];
 
                 if (selectedDateStr === actual_booking_date) {
-                    // Parse available_time into a Date object for comparison
-                    let [hours, minutes] = timeObj.time.split(":").map(Number);
-                    //et timeDate = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));
-                    actual_booking_date_time_format.setHours(hours, minutes, 0, 0);
+                    // Compare against the slot time (already parsed to 24h above)
+                    actual_booking_date_time_format.setHours(slot_time.hours, slot_time.minutes, 0, 0);
 
                     console.log('actual_booking_date_time_format',actual_booking_date_time_format);
                    // console.log('timeDate',timeDate);
 
                     if (actual_booking_date_time >= actual_booking_date_time_format) {
                         time_enable = true;
-                        past_time = 'Past time';
+                        // Already started = past; still ahead but inside the buffer window = not bookable yet.
+                        past_time = (current_date_time >= actual_booking_date_time_format) ? rbfw_past_time_label : rbfw_buffer_time_label;
                     }else{
                         time_enable = false;
                         past_time = '';
@@ -539,31 +581,11 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                 }
 
 
-                let myTime = timeObj.time;  // 2:30 PM
-
-                let [time, modifier] = myTime.split(" ");   // "2:30" and "PM"
-                let [hours, minutes] = time.split(":").map(Number);
-
-                if (modifier === "PM" && hours !== 12) {
-                    hours += 12;
-                }
-                if (modifier === "AM" && hours === 12) {
-                    hours = 0;
-                }
-
-
                 let date = new Date();
 
-                const h = parseInt(hours, 10);
-                const m = parseInt(minutes, 10);
-
-                if (!isNaN(h) && !isNaN(m)) {
-                    date.setHours(h);
-                    date.setMinutes(m);
-                    date.setSeconds(0);
-                } else {
-                    console.error("Invalid hours or minutes:", hours, minutes);
-                }
+                date.setHours(slot_time.hours);
+                date.setMinutes(slot_time.minutes);
+                date.setSeconds(0);
 
                 if (isNaN(date.getTime())) {
                     console.error("Invalid Date generated:", date);
@@ -574,7 +596,7 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                         const a = document.createElement("a");
                         if (time_enable) {
                             a.className = "rbfw_bikecarsd_time_disable";
-                            a.title = "Past Time";
+                            a.title = past_time;
                         } else {
                             a.className = "rbfw_bikecarsd_time";
                         }
@@ -595,6 +617,8 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                         option.textContent = formatTime(date, rbfw_js_variables.timeFormat); timeObj.time;
                         option.disabled = time_enable;
                         option.title = past_time;
+                        // sd_script.js must not re-enable this slot when it refreshes sold-out state.
+                        if (time_enable) { option.setAttribute('data-rbfw-time-blocked', '1'); }
                         timeSelect.appendChild(option);
                     }
                 }
@@ -1232,9 +1256,19 @@ jQuery(function ($) {
             var rate = parseFloat($form.find('.rbfw_sd_price_input').val()) || 0;
             $form.find('#rbfw_service_price').val(rate.toFixed(2));
             if (typeof rbfw_price_calculation_sd === 'function') rbfw_price_calculation_sd();
-        } else if ($form.find('#rbfw_item_quantity_md').length) {
+        } else if ($form.find('.rbfw_bike_car_md_item_wrapper').length) {
             // Multi-day: schedule the AJAX price recalculation so the variation
-            // surcharge is included in the live subtotal/total.
+            // surcharge is included in the live subtotal/total, and — for items with
+            // variations but no standalone Quantity dropdown (rbfw_enable_md_type_item_qty
+            // = no, the normal setup for a variation-priced item like a dress with
+            // Colour/Size steppers instead of a single Quantity field) — so the Book Now
+            // button ever gets re-enabled at all. This used to check for
+            // #rbfw_item_quantity_md specifically, but that <select> only renders when
+            // the standalone Quantity dropdown is ALSO enabled; when it's off, that
+            // element never exists, this branch was never entered, and clicking a
+            // variation stepper could never re-run the price/availability check that
+            // enables the button (md_script.js's own AJAX success handler) — leaving
+            // Book Now stuck disabled even after picking dates and a quantity.
             if (typeof rbfwScheduleMdPriceCalculation === 'function') {
                 rbfwScheduleMdPriceCalculation();
             }

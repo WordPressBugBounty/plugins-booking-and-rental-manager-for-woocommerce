@@ -187,10 +187,6 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
                     <i class="fas fa-lock"></i>
                     <span><?php esc_html_e( 'Secure payment', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
                 </div>
-                <div class="rbfw-sd-trust-item">
-                    <i class="far fa-calendar-times"></i>
-                    <span><?php esc_html_e( 'Free cancellation', 'booking-and-rental-manager-for-woocommerce' ); ?></span>
-                </div>
             </div>
         </div>
 
@@ -290,6 +286,7 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
 
                     <input type="hidden" name="rbfw_off_days" id="rbfw_off_days"  value='<?php echo esc_attr(rbfw_off_days($post_id)); ?>'>
                     <input type="hidden" name="rbfw_offday_range" id="rbfw_offday_range"  value='<?php echo esc_attr(rbfw_off_dates($post_id)); ?>'>
+					<input type="hidden" id="rbfw_global_offday_range" value='<?php echo esc_attr( rbfw_global_off_dates() ); ?>'>
                     <input type="hidden" id="rbfw_block_offday_booking" value="<?php echo esc_attr(rbfw_block_offday_range_booking($post_id)); ?>">
 
 
@@ -796,6 +793,5 @@ $_rbfw_mi_price_unit = ( ! empty( $auto_selected_pricing_type ) && isset( $_rbfw
         </form>
     </div>
 </div>
-
 
 

@@ -37,6 +37,7 @@ if ( ! function_exists( 'rbfw_define_woocommerce_fallbacks' ) ) {
 			class RBFW_WC_Cart_Fallback {
 				public function get_cart() { return array(); }
 				public function get_cart_contents_count() { return 0; }
+				public function get_cart_total() { return function_exists( 'wc_price' ) ? wc_price( 0 ) : '0'; }
 				public function is_empty() { return true; }
 				public function empty_cart() {}
 			}
@@ -201,6 +202,19 @@ if ( ! function_exists( 'rbfw_is_woocommerce_activating' ) ) {
 		// Single / bulk activation via the admin Plugins screen.
 		if ( isset( $_REQUEST['action'] ) && $_REQUEST['action'] === 'activate' ) {
 			if ( isset( $_REQUEST['plugin'] ) && strpos( sanitize_text_field( wp_unslash( $_REQUEST['plugin'] ) ), 'woocommerce.php' ) !== false ) {
+				return true;
+			}
+		}
+		// Core's AJAX installer/activator (wp_ajax_activate_plugin(), used by the
+		// Plugins/Add Plugins screens' own JS and by third-party "one-click setup"
+		// flows via wp.updates.activatePlugin()) posts action=activate-plugin
+		// (hyphenated — a different string from the classic ?action=activate link
+		// above) plus `plugin` and `slug` fields to admin-ajax.php.
+		if ( isset( $_REQUEST['action'] ) && $_REQUEST['action'] === 'activate-plugin' ) {
+			if ( isset( $_REQUEST['plugin'] ) && strpos( sanitize_text_field( wp_unslash( $_REQUEST['plugin'] ) ), 'woocommerce.php' ) !== false ) {
+				return true;
+			}
+			if ( isset( $_REQUEST['slug'] ) && 'woocommerce' === sanitize_text_field( wp_unslash( $_REQUEST['slug'] ) ) ) {
 				return true;
 			}
 		}
