@@ -4110,7 +4110,9 @@ function rbfw_handle_hybrid_rate($i, $post_id, $day, $date, $start_date, $end_da
 
         if ( $start_date === $end_date ) {
             $rbfw_enable_hourly_rate = get_post_meta( $post_id, 'rbfw_enable_hourly_rate', true );
-            if ( $span_hours && $rbfw_enable_hourly_rate === 'no' ) {
+            // No time span (date-only booking, pickup and return on the same day) is a
+            // whole day: bill the daily rate instead of 0 hours at the hourly rate.
+            if ( ! $span_hours || $rbfw_enable_hourly_rate === 'no' ) {
                 return (float) rbfw_get_day_rate( $post_id, $day, $daily_rate, $seasonal_prices, $date, $span_hours, $enable_daily, $total_days, $start_date, $end_date );
             }
             return (float) rbfw_md_price_for_hours_period( $post_id, $span_hours, $day, $date, $daily_rate, $hourly_rate, $seasonal_prices, $enable_daily );
@@ -4343,6 +4345,65 @@ function check_seasonal_price_sd( $Book_date, $rbfw_sp_prices, $rent_type = '0' 
 
 
 /**
+ * The tax status and class WooCommerce should apply to a rental item, normalized.
+ *
+ * One definition shared by the checkout mirror (RBFW_Hidden_Product::sync_tax_to_product(),
+ * which stamps these onto the backing product WooCommerce actually charges against) and by
+ * the booking summary on the item page, so the figure the customer is quoted is the figure
+ * they are charged.
+ *
+ * An item with no explicit choice keeps WooCommerce's OWN default, "taxable". It used to
+ * fall back to "none" here, on the assumption that a freshly created hidden product was
+ * already "none" — it is not: create_hidden_wc_product() writes no _tax_status at all, and
+ * WC_Product::set_tax_status() turns an empty value into "taxable". Mirroring "none" onto
+ * the product therefore switched tax OFF at checkout for every rental whose Tax tab had
+ * never been touched, the moment that item was next saved. To charge no tax on an item,
+ * set Tax Status = None on it explicitly.
+ *
+ * @param int $item_id Rental item id.
+ * @return array{status:string,class:string} status: taxable|shipping|none, class: WC slug ('' = Standard).
+ */
+function rbfw_resolve_item_tax( $item_id ) {
+	$item_id = absint( $item_id );
+	if ( ! $item_id ) {
+		return array( 'status' => 'taxable', 'class' => '' );
+	}
+
+	/*
+	 * The item's own choice is the only input, whichever editor made it. The modern editor
+	 * deletes both keys when its Tax Settings card is switched off, so "card off" already
+	 * means "unconfigured" — reading the toggle here as well would let a stale "off" flag
+	 * override a Tax Status later set from the classic Tax tab.
+	 */
+	$status = (string) get_post_meta( $item_id, '_tax_status', true );
+	$class  = (string) get_post_meta( $item_id, '_tax_class', true );
+
+	// Unset, or the "Select Tax Status" placeholder option -> WooCommerce's default.
+	if ( ! in_array( $status, array( 'taxable', 'shipping', 'none' ), true ) ) {
+		$status = 'taxable';
+	}
+
+	if ( 'none' === $status ) {
+		return array( 'status' => 'none', 'class' => '' );
+	}
+
+	/*
+	 * WooCommerce's Standard class IS the empty string — its own product screen posts
+	 * value="" for it. The rental tax tab offers value="standard" instead, and storing
+	 * that verbatim made WC_Tax look up a class slug that no rate row carries, so a
+	 * "taxable / Standard" rental still came out with zero tax.
+	 */
+	if ( 'standard' === $class ) {
+		$class = '';
+	}
+	if ( '' !== $class && class_exists( 'WC_Tax' ) && ! in_array( $class, WC_Tax::get_tax_class_slugs(), true ) ) {
+		$class = '';
+	}
+
+	return array( 'status' => $status, 'class' => $class );
+}
+
+/**
  * The tax WooCommerce will apply to a rental, resolved for display in the booking summary.
  *
  * The item's own _tax_status / _tax_class are the source of truth (both editors write them,
@@ -4364,18 +4425,13 @@ function rbfw_item_tax_info( $item_id ) {
 	if ( ! $item_id || ! class_exists( 'WC_Tax' ) || 'yes' !== get_option( 'woocommerce_calc_taxes' ) ) {
 		return $none;
 	}
-	if ( 'taxable' !== get_post_meta( $item_id, '_tax_status', true ) ) {
+	/* Same resolution the backing product is mirrored with, so the summary can never
+	   promise a tax the checkout will not charge (or hide one that it will). */
+	$item_tax = rbfw_resolve_item_tax( $item_id );
+	if ( 'taxable' !== $item_tax['status'] ) {
 		return $none;
 	}
-	if ( 'no' === get_post_meta( $item_id, 'rbfw_enable_tax_settings', true ) ) {
-		return $none;
-	}
-
-	// WooCommerce's Standard class is the empty string; the rental tax tab offers "standard".
-	$tax_class = (string) get_post_meta( $item_id, '_tax_class', true );
-	if ( 'standard' === $tax_class ) {
-		$tax_class = '';
-	}
+	$tax_class = $item_tax['class'];
 
 	$rates = WC_Tax::get_rates( $tax_class );
 	if ( empty( $rates ) ) {
@@ -5228,44 +5284,40 @@ if (!function_exists('rbfw_day_row_md')) {
 
 
 
-function findMinimumPrice($items,$pricing_display_for_listing='') {
-    $minPrice = PHP_INT_MAX;
-    $minItem  = null;
-    $minType  = null;
+/** Return the lowest configured rate, preferring the requested listing duration. */
+function findMinimumPrice( $items, $pricing_display_for_listing = '' ) {
+    $result = array( 'item_name' => null, 'price_type' => null, 'price' => 0.0 );
+    $price_types = array( 'hourly_price', 'daily_price', 'weekly_price', 'monthly_price' );
+    $preferred = $pricing_display_for_listing . '_price';
+    $passes = in_array( $preferred, $price_types, true ) ? array( array( $preferred ), $price_types ) : array( $price_types );
 
-    foreach ($items as $item) {
-        foreach (['hourly_price', 'daily_price', 'weekly_price', 'monthly_price'] as $priceType) {
-
-            if ($priceType==$pricing_display_for_listing.'_price' && !empty($item[$priceType]) && $item[$priceType] < $minPrice) {
-
-                $minPrice = $item[$priceType];
-                $minItem  = $item['item_name'];
-                $minType  = $priceType;
-
+    foreach ( $passes as $types ) {
+        foreach ( (array) $items as $item ) {
+            foreach ( $types as $type ) {
+                // An explicit zero is a valid price; a blank or invalid value is not.
+                if ( ! is_array( $item ) || ! isset( $item[ $type ] ) || ! is_numeric( $item[ $type ] ) ) {
+                    continue;
+                }
+                $price = (float) $item[ $type ];
+                if ( ! is_finite( $price ) || $price < 0 ) {
+                    continue;
+                }
+                if ( null === $result['price_type'] || $price < $result['price'] ) {
+                    $result = array(
+                        'item_name'  => isset( $item['item_name'] ) ? $item['item_name'] : null,
+                        'price_type' => $type,
+                        'price'      => $price,
+                    );
+                }
             }
-
+        }
+        if ( null !== $result['price_type'] ) {
+            break;
         }
     }
 
-   if($minPrice==PHP_INT_MAX){
-       foreach ($items as $item) {
-           foreach (['hourly_price', 'daily_price', 'weekly_price', 'monthly_price'] as $priceType) {
-               if (!empty($item[$priceType]) && $item[$priceType] < $minPrice) {
-                   $minPrice = $item[$priceType];
-                   $minItem  = $item['item_name'];
-                   $minType  = $priceType;
-               }
-           }
-       }
-   }
-
-    return [
-        'item_name' => $minItem,
-        'price_type' => $minType,
-        'price' => $minPrice
-    ];
+    return $result;
 }
-
 
 
 /**

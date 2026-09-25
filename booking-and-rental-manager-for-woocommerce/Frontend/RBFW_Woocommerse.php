@@ -947,7 +947,9 @@ if (!class_exists('RBFW_Woocommerce')) {
                 $rbfw_resort_ticket_info = $rbfw_resort->rbfw_resort_ticket_info( $rbfw_id, $rbfw_checkin_datetime, $rbfw_checkout_datetime, $rbfw_room_price_category, $rbfw_room_info, $rbfw_service_info, $rbfw_regf_info, $rbfw_room_price , $rbfw_management_info  );
 
                 $security_deposit                           = rbfw_security_deposit( $rbfw_id, $sub_total_price );
-                $total_price                                = $discounted_total + $security_deposit['security_deposit_amount'];
+                // The deposit is charged once, as the "Security Deposit" cart fee built from
+                // rbfw_ticket_info (custom_taxable_fee()), like every other item type.
+                $total_price                                = $discounted_total;
                 $start_date                                 = $rbfw_checkin_datetime;
                 $end_date                                   = $rbfw_checkout_datetime;
                 $cart_item_data['rbfw_start_datetime']      = $rbfw_checkin_datetime;
@@ -983,25 +985,31 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
                 $rbfw_start_datetime = $rbfw_bikecarsd_selected_date;
 
-                // Single-day item variations: the base rental is charged ONCE. Each
-                // selected value only adds its own price (surcharge, computed below) and
-                // reserves per-value stock (from rbfw_variation_info, independent of this
-                // quantity). So the duration rate must never be multiplied by the variation
-                // total — force the base quantity to 1 whenever a value is selected. Done
-                // server-side too (not just in JS) so the cart price is authoritative.
+                /* Single-day item variations: the per-value steppers REPLACE the standalone
+                   Quantity selector (the booking script hides it while they are on screen),
+                   so the SUM of the selected quantities is how many units are being rented.
+                   Derive the base quantity from them here, server-side, so the cart price is
+                   authoritative and cannot be lowered — or raised — by the browser.
+
+                   2.7.4 forced this to 1 ("charge the base rate once"): renting two bikes then
+                   cost the same as renting one, and the item-level timely stock was only
+                   decremented by a single unit, so the remaining units stayed bookable. The
+                   per-value surcharge is still added separately below, and per-value stock is
+                   still enforced from rbfw_variation_info, so neither is double counted. */
                 if ( get_post_meta( $rbfw_id, 'rbfw_enable_variations', true ) === 'yes'
                     && isset( $sd_input_data_sabitized['rbfw_variation_qty'] )
                     && is_array( $sd_input_data_sabitized['rbfw_variation_qty'] ) ) {
+                    $rbfw_variation_total_qty = 0;
                     foreach ( $sd_input_data_sabitized['rbfw_variation_qty'] as $rbfw_vq_values ) {
                         if ( ! is_array( $rbfw_vq_values ) ) {
                             continue;
                         }
                         foreach ( $rbfw_vq_values as $rbfw_vq ) {
-                            if ( (int) $rbfw_vq > 0 ) {
-                                $rbfw_item_quantity = 1;
-                                break 2;
-                            }
+                            $rbfw_variation_total_qty += max( 0, (int) $rbfw_vq );
                         }
+                    }
+                    if ( $rbfw_variation_total_qty > 0 ) {
+                        $rbfw_item_quantity = $rbfw_variation_total_qty;
                     }
                 }
 
@@ -1951,7 +1959,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
 
 
-                $security_deposit = rbfw_security_deposit( $rbfw_id, ( (int) $rbfw_room_duration_price + (int) $rbfw_room_service_price ) );
+                $security_deposit = array( 'security_deposit_amount' => $this->rbfw_charged_security_deposit( $values ) );
                 if ( $security_deposit['security_deposit_amount'] ) {
                     $item->add_meta_data( $rbfw_security_deposit_label, wc_price( $security_deposit['security_deposit_amount'] ) );
                 }
@@ -2165,7 +2173,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
 
 
-                $security_deposit = rbfw_security_deposit( $rbfw_id, ( (int) $rbfw_bikecarsd_duration_price + (int) $rbfw_bikecarsd_service_price ) );
+                $security_deposit = array( 'security_deposit_amount' => $this->rbfw_charged_security_deposit( $values ) );
                 if ( $security_deposit['security_deposit_amount'] ) {
                     $item->add_meta_data( $rbfw_security_deposit_label, wc_price( $security_deposit['security_deposit_amount'] ) );
                 }
@@ -2256,7 +2264,7 @@ if (!class_exists('RBFW_Woocommerce')) {
                 }
 
 
-                $security_deposit = rbfw_security_deposit( $rbfw_id, ( (int) $rbfw_multi_item_price + (int) $rbfw_service_category_price ) );
+                $security_deposit = array( 'security_deposit_amount' => $this->rbfw_charged_security_deposit( $values ) );
 
 
                 if ( $security_deposit['security_deposit_amount'] ) {
@@ -2557,7 +2565,7 @@ if (!class_exists('RBFW_Woocommerce')) {
 
 
 
-                $security_deposit = rbfw_security_deposit( $rbfw_id, ( (int) $rbfw_duration_price + (int) $rbfw_service_price ) );
+                $security_deposit = array( 'security_deposit_amount' => $this->rbfw_charged_security_deposit( $values ) );
                 if ( $security_deposit['security_deposit_amount'] ) {
                     $item->add_meta_data( $rbfw_security_deposit_label, wc_price( $security_deposit['security_deposit_amount'] ) );
                 }
@@ -2607,6 +2615,28 @@ if (!class_exists('RBFW_Woocommerce')) {
             }
 
         }
+        /**
+         * Security deposit actually charged for a cart line.
+         *
+         * This is the rbfw_ticket_info amount custom_taxable_fee() bills as the
+         * "Security Deposit" cart fee. The order line used to recalculate it from
+         * (int)-truncated prices without surcharges, so it could show $34.80 while
+         * the order charged $35.09.
+         *
+         * @param array $values Cart item data.
+         * @return float
+         */
+        private function rbfw_charged_security_deposit( $values ) {
+            $amount = 0.0;
+            if ( ! empty( $values['rbfw_ticket_info'] ) && is_array( $values['rbfw_ticket_info'] ) ) {
+                foreach ( $values['rbfw_ticket_info'] as $ticket ) {
+                    $amount += isset( $ticket['security_deposit_amount'] ) ? (float) $ticket['security_deposit_amount'] : 0.0;
+                }
+            }
+
+            return $amount;
+        }
+
         public   function rbfw_cart_ticket_info( $product_id, $rbfw_pickup_start_date, $rbfw_pickup_end_date, $rbfw_pickup_start_time, $rbfw_pickup_end_time, $rbfw_pickup_point, $rbfw_dropoff_point, $rbfw_item_quantity, $rbfw_duration_price, $rbfw_service_price, $total_price, $rbfw_service_info, $variation_info, $discount_type = null, $discount_amount = null, $rbfw_regf_info = array(), $rbfw_service_infos = null, $total_days = 0, $security_deposit = [], $rbfw_management_info =[], $rbfw_management_price=0 ) {
             global $rbfw;
             $rbfw_rent_type  = get_post_meta( $product_id, 'rbfw_item_type', true );
