@@ -521,6 +521,205 @@ function rbfw_url_exclude_search_engine() {
 				&& 'yes' === $settings['rbfw_allow_duplicate_rental_cart_item'];
 		}
 	}
+	if ( ! function_exists( 'rbfw_sanitize_cutoff_time' ) ) {
+		/**
+		 * Settings sanitizer for "Same day booking cutoff time": a 24-hour HH:MM value
+		 * from 00:01 to 23:59, or '' (no cutoff). 00:00 would close today before it
+		 * starts — that is "Same day booking = No", so it is not accepted as a cutoff.
+		 *
+		 * @param mixed $value Submitted value.
+		 * @return string
+		 */
+		function rbfw_sanitize_cutoff_time( $value ) {
+			$value = trim( sanitize_text_field( (string) $value ) );
+			if ( ! preg_match( '/^([01]?\d|2[0-3]):([0-5]\d)$/', $value, $m ) || ( 0 === (int) $m[1] && 0 === (int) $m[2] ) ) {
+				return '';
+			}
+
+			return sprintf( '%02d:%02d', (int) $m[1], (int) $m[2] );
+		}
+	}
+	if ( ! function_exists( 'rbfw_same_day_cutoff_minutes' ) ) {
+		/**
+		 * Minutes after midnight (site timezone) after which same-day pickups close,
+		 * or -1 when there is no cutoff (same-day booking off, or no time set).
+		 *
+		 * Reads the stored settings array directly so it also works in WP-CLI and
+		 * background contexts where rbfw_get_option() intentionally skips.
+		 *
+		 * @return int
+		 */
+		function rbfw_same_day_cutoff_minutes() {
+			$settings = get_option( 'rbfw_basic_gen_settings', array() );
+			if ( ! is_array( $settings ) || empty( $settings['today_booking_enable'] ) || 'yes' !== $settings['today_booking_enable'] ) {
+				return -1;
+			}
+			$time = rbfw_sanitize_cutoff_time( isset( $settings['today_booking_cutoff_time'] ) ? $settings['today_booking_cutoff_time'] : '' );
+			if ( '' === $time ) {
+				return -1;
+			}
+			list( $h, $m ) = array_map( 'intval', explode( ':', $time ) );
+
+			return $h * 60 + $m;
+		}
+	}
+	if ( ! function_exists( 'rbfw_same_day_cutoff_js_vars' ) ) {
+		/**
+		 * Values the booking calendars need to apply the cutoff on the site clock
+		 * (not the visitor's), evaluated live so cached pages stay correct.
+		 *
+		 * @return array
+		 */
+		function rbfw_same_day_cutoff_js_vars() {
+			$timezone = wp_timezone();
+
+			return array(
+				'rbfw_today_cutoff_minutes' => rbfw_same_day_cutoff_minutes(),
+				'rbfw_timezone'             => $timezone->getName(),
+				'rbfw_timezone_offset'      => (int) ( $timezone->getOffset( new DateTime( 'now', $timezone ) ) / 60 ),
+			);
+		}
+	}
+	if ( ! function_exists( 'rbfw_request_pickup_date' ) ) {
+		/**
+		 * Pickup date from a booking-form submission. Multi-day and multi-item forms post
+		 * rbfw_pickup_start_date, resort posts rbfw_start_datetime, single-day posts
+		 * rbfw_bikecarsd_selected_date.
+		 *
+		 * @param array $request Unslashed request data.
+		 * @return string
+		 */
+		function rbfw_request_pickup_date( $request ) {
+			foreach ( array( 'rbfw_pickup_start_date', 'rbfw_start_datetime', 'rbfw_bikecarsd_selected_date' ) as $key ) {
+				if ( ! empty( $request[ $key ] ) && is_scalar( $request[ $key ] ) ) {
+					return sanitize_text_field( (string) $request[ $key ] );
+				}
+			}
+
+			return '';
+		}
+	}
+	if ( ! function_exists( 'rbfw_pickup_date_error' ) ) {
+		/**
+		 * Server-side twin of the booking calendars' day rules: the reason a pickup date
+		 * must be refused, or '' when it is allowed. All dates use the site timezone.
+		 *
+		 *  - a date before today is refused;
+		 *  - today is refused when "Same day booking" is off;
+		 *  - today is refused once the "Same day booking cutoff time" has passed.
+		 *
+		 * The calendars enforce these in the browser only, so a request that skips the JS
+		 * could otherwise book them. Items with a fixed rental period ("Enable start and
+		 * end date" = No) are skipped: their dates are set by the admin, have no calendar,
+		 * and the period legitimately keeps selling after its start date.
+		 *
+		 * @param string                 $pickup_date Posted or stored pickup date (Y-m-d…).
+		 * @param int                    $rbfw_id     Rental item id (0 = unknown).
+		 * @param DateTimeImmutable|null $now         Current time (for tests).
+		 * @return string
+		 */
+		function rbfw_pickup_date_error( $pickup_date, $rbfw_id = 0, $now = null ) {
+			$raw = trim( (string) $pickup_date );
+			if ( '' === $raw ) {
+				return '';
+			}
+			if ( $rbfw_id && 'no' === get_post_meta( $rbfw_id, 'rbfw_enable_start_end_date', true ) ) {
+				return '';
+			}
+
+			$timezone = wp_timezone();
+			$now      = $now instanceof DateTimeImmutable ? $now->setTimezone( $timezone ) : new DateTimeImmutable( 'now', $timezone );
+			$ymd      = substr( $raw, 0, 10 );
+			$pickup   = DateTimeImmutable::createFromFormat( '!Y-m-d', $ymd, $timezone );
+			if ( $pickup && $pickup->format( 'Y-m-d' ) !== $ymd ) {
+				return ''; // Overflowing date such as 2026-02-31: leave it to the other validators.
+			}
+			if ( ! $pickup ) {
+				try {
+					$pickup = new DateTimeImmutable( $raw, $timezone );
+				} catch ( Exception $e ) {
+					return ''; // Unparseable: the other booking validators handle bad dates.
+				}
+			}
+
+			$pickup_day = $pickup->format( 'Y-m-d' );
+			$today      = $now->format( 'Y-m-d' );
+			if ( $pickup_day > $today ) {
+				return '';
+			}
+			if ( $pickup_day < $today ) {
+				return __( 'The selected pickup date has already passed. Please choose another date.', 'booking-and-rental-manager-for-woocommerce' );
+			}
+
+			$tomorrow = wp_date( get_option( 'date_format' ), $now->modify( '+1 day' )->getTimestamp(), $timezone );
+			$settings = get_option( 'rbfw_basic_gen_settings', array() );
+			if ( ! is_array( $settings ) || empty( $settings['today_booking_enable'] ) || 'yes' !== $settings['today_booking_enable'] ) {
+				return sprintf(
+					/* translators: %s: earliest pickup date */
+					__( 'Same-day rentals are not available. The earliest available pickup date is %s.', 'booking-and-rental-manager-for-woocommerce' ),
+					$tomorrow
+				);
+			}
+
+			$cutoff = rbfw_same_day_cutoff_minutes();
+			if ( $cutoff < 0 || (int) $now->format( 'G' ) * 60 + (int) $now->format( 'i' ) < $cutoff ) {
+				return '';
+			}
+
+			return sprintf(
+				/* translators: 1: cutoff time, 2: earliest pickup date */
+				__( 'Same-day rentals can only be booked until %1$s. The earliest available pickup date is %2$s.', 'booking-and-rental-manager-for-woocommerce' ),
+				wp_date( get_option( 'time_format' ), $now->setTime( intdiv( $cutoff, 60 ), $cutoff % 60 )->getTimestamp(), $timezone ),
+				$tomorrow
+			);
+		}
+	}
+	if ( ! function_exists( 'rbfw_pickup_time_unavailable' ) ) {
+		/**
+		 * Why a pickup at a given date and time can no longer be booked, using the
+		 * WordPress timezone: 'past' when it has already started, 'lead_time' when it
+		 * starts inside the item's Buffer Time Before window, or '' when it is bookable.
+		 *
+		 * The same rule the pickup-time dropdown applies in the browser, for callers that
+		 * know the exact start time (Single Day fixed-time rental options, add-to-cart).
+		 * Items with a fixed rental period ("Enable start and end date" = No) are skipped,
+		 * as in rbfw_pickup_date_error().
+		 *
+		 * @param int                    $rbfw_id     Rental item id.
+		 * @param string                 $pickup_date Pickup date (Y-m-d).
+		 * @param string                 $pickup_time Pickup time (H:i, h:i a, ...).
+		 * @param DateTimeImmutable|null $now         Current time (for tests).
+		 * @return string '' | 'past' | 'lead_time'
+		 */
+		function rbfw_pickup_time_unavailable( $rbfw_id, $pickup_date, $pickup_time, $now = null ) {
+			$pickup_date = trim( (string) $pickup_date );
+			$pickup_time = trim( (string) $pickup_time );
+			if ( '' === $pickup_date || '' === $pickup_time ) {
+				return '';
+			}
+			if ( $rbfw_id && 'no' === get_post_meta( $rbfw_id, 'rbfw_enable_start_end_date', true ) ) {
+				return '';
+			}
+
+			$timezone = wp_timezone();
+			$now      = $now instanceof DateTimeImmutable ? $now->setTimezone( $timezone ) : new DateTimeImmutable( 'now', $timezone );
+			try {
+				$pickup = new DateTimeImmutable( substr( $pickup_date, 0, 10 ) . ' ' . $pickup_time, $timezone );
+			} catch ( Exception $e ) {
+				return ''; // Unparseable: the other booking validators handle bad input.
+			}
+
+			if ( $pickup <= $now ) {
+				return 'past';
+			}
+			$buffer_hours = $rbfw_id ? absint( get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ) : 0;
+			if ( $buffer_hours && $pickup < $now->modify( '+' . $buffer_hours . ' hours' ) ) {
+				return 'lead_time';
+			}
+
+			return '';
+		}
+	}
 	// Deprecated function - use esc_html_e() instead
 	function rbfw_string( $option_name, $default_string ) {
 		echo esc_html( $default_string );
@@ -682,11 +881,17 @@ function rbfw_url_exclude_search_engine() {
 		}
 		$rbfw_faq_arr = get_post_meta( $post_id, 'mep_event_faq', true );
 		if ( ! empty( $rbfw_faq_arr ) ) {
-
+			$rbfw_faq_visible_count = 5;
+			$rbfw_faq_total         = count( $rbfw_faq_arr );
 			?>
             <div id="rbfw_faq_accordion">
-				<?php foreach ( $rbfw_faq_arr as $faq ) { ?>
-                    <div class="rbfw_faq_item">
+				<?php foreach ( $rbfw_faq_arr as $rbfw_faq_index => $faq ) {
+					$rbfw_faq_item_class = 'rbfw_faq_item';
+					if ( $rbfw_faq_index >= $rbfw_faq_visible_count ) {
+						$rbfw_faq_item_class .= ' rbfw_faq_item_more';
+					}
+					?>
+                    <div class="<?php echo esc_attr( $rbfw_faq_item_class ); ?>">
 						<?php if ( ! empty( $faq['rbfw_faq_title'] ) ): ?>
                             <h3 class="rbfw_faq_header"><?php echo esc_html( $faq['rbfw_faq_title'] ); ?> <i class="fas fa-plus"></i></h3>
 						<?php endif; ?>
@@ -713,6 +918,9 @@ function rbfw_url_exclude_search_engine() {
                     </div>
 				<?php } ?>
             </div>
+			<?php if ( $rbfw_faq_total > $rbfw_faq_visible_count ): ?>
+            <button type="button" class="rbfw_faq_load_more"><?php esc_html_e( 'Load More', 'booking-and-rental-manager-for-woocommerce' ); ?></button>
+			<?php endif; ?>
             <script>
                 jQuery(document).ready(function ($) {
                     
@@ -1715,6 +1923,18 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
         'processing' => 'processing',
         'completed'  => 'completed',
     ];
+
+    /* Buffer Time After: the unit stays unavailable for this many hours after every
+       booking ends (cleaning / turnaround). Applied to both sides of the overlap
+       test: an existing booking blocks until its end + buffer, and the requested
+       booking needs its own end + buffer free, so it can't end right before the
+       next customer's pickup either. */
+    $buffer_after         = (int) get_post_meta( $post_id, 'rbfw_buffer_time_after', true );
+    $request_end_buffered = clone $end_date_time;
+    if ( $buffer_after > 0 ) {
+        $request_end_buffered->modify( '+' . $buffer_after . ' hours' );
+    }
+
     if ( ! empty( $rbfw_inventory ) ) {
         foreach ( $rbfw_inventory as $key => $inventory ) {
             $rbfw_item_quantity = ! empty( $inventory['rbfw_item_quantity'] ) ? $inventory['rbfw_item_quantity'] : 0;
@@ -1762,9 +1982,14 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 
 
 
+                if ( $buffer_after > 0 ) {
+                    $date_inventory_end->modify( '+' . $buffer_after . ' hours' );
+                }
+
                 // Treat reservations as half-open intervals [start, end). An item
-                // returned at 10:00 is available to a new customer at 10:00.
-                if ( $date_inventory_start < $end_date_time && $start_date_time < $date_inventory_end ) {
+                // returned at 10:00 is available to a new customer at 10:00
+                // (or at 10:00 + Buffer Time After, when one is set).
+                if ( $date_inventory_start < $request_end_buffered && $start_date_time < $date_inventory_end ) {
                     $total_booked += $rbfw_item_quantity;
                 }
             }
@@ -1962,13 +2187,23 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 	}
 	/****************************************************
 	 * Check Min-Max Booking Day Plugin Active
+	 *
+	 * With a rental item ID, also asks whether day limits are switched on for
+	 * that item: the addon answers through `rbfw_min_max_booking_day_enabled`
+	 * (its per-item On/Off switch). Without an ID it is the plain "addon
+	 * active" check it always was.
+	 *
+	 * @param int $post_id Optional rental item ID.
+	 * @return bool
 	 ****************************************************/
-	function rbfw_check_min_max_booking_day_active() {
-		if ( is_plugin_active( 'booking-and-rental-manager-min-max-booking-day/rent-min-max-booking-day.php' ) ) {
-			return true;
-		} else {
+	function rbfw_check_min_max_booking_day_active( $post_id = 0 ) {
+		if ( ! is_plugin_active( 'booking-and-rental-manager-min-max-booking-day/rent-min-max-booking-day.php' ) ) {
 			return false;
 		}
+
+		$post_id = absint( $post_id );
+
+		return $post_id ? (bool) apply_filters( 'rbfw_min_max_booking_day_enabled', true, $post_id ) : true;
 	}
 	/****************************************************
 	 * Date-wise Min/Max booking-day ranges for an item
@@ -1991,7 +2226,7 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 		$post_id = absint( $post_id );
 		$ranges  = array();
 
-		if ( ! $post_id || ! rbfw_check_min_max_booking_day_active() ) {
+		if ( ! $post_id || ! rbfw_check_min_max_booking_day_active( $post_id ) ) {
 			return $ranges;
 		}
 
@@ -2078,6 +2313,9 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 	 ****************************************************/
 	function rbfw_get_effective_minmax_days( $post_id, $start_date ) {
 		$post_id = absint( $post_id );
+		if ( ! rbfw_check_min_max_booking_day_active( $post_id ) ) {
+			return array( 'min' => 0, 'max' => 0 );
+		}
 		$eff     = array(
 			'min' => (int) get_post_meta( $post_id, 'rbfw_minimum_booking_day', true ),
 			'max' => (int) get_post_meta( $post_id, 'rbfw_maximum_booking_day', true ),
@@ -2106,6 +2344,120 @@ function rbfw_timely_available_quantity_updated( $post_id, $start_date, $start_t
 
 		return $eff;
 	}
+	/****************************************************
+	 * Booking-summary note for a Discount Over X Days discount
+	 *
+	 * Says which tier applied and what it is worth, e.g. "(50% off for over 3
+	 * days)" or "($10.00 off per item for over 3 days)", from the array
+	 * rbfw_get_discount_array() returns. Plain text for jQuery .text(). The
+	 * tier ("discount_over_days") comes from newer addon versions; without it
+	 * the note still states the rate.
+	 *
+	 * @param array $discount_arr  Result of rbfw_get_discount_array().
+	 * @param int   $item_quantity Units booked (a fixed discount is per unit).
+	 * @return string '' when no discount applied.
+	 ****************************************************/
+	function rbfw_discount_summary_note( $discount_arr, $item_quantity = 1 ) {
+		if ( empty( $discount_arr['discount_amount'] ) || empty( $discount_arr['discount_number'] ) ) {
+			return '';
+		}
+
+		$number = (float) $discount_arr['discount_number'];
+		$type   = isset( $discount_arr['discount_type'] ) ? $discount_arr['discount_type'] : '';
+		if ( 'percentage' === $type ) {
+			$value = ( (string) $number ) . '%';
+		} else {
+			$value = html_entity_decode( wp_strip_all_tags( wc_price( $number ) ), ENT_QUOTES, get_bloginfo( 'charset' ) );
+		}
+		$per_item = ( 'percentage' !== $type && (int) $item_quantity > 1 );
+		$days     = isset( $discount_arr['discount_over_days'] ) && '' !== (string) $discount_arr['discount_over_days']
+			? absint( $discount_arr['discount_over_days'] ) : null;
+
+		if ( null === $days ) {
+			/* translators: %s: discount rate, e.g. "50%" or "$10.00". */
+			$note = $per_item ? sprintf( __( '%s off per item', 'booking-and-rental-manager-for-woocommerce' ), $value )
+				: sprintf( __( '%s off', 'booking-and-rental-manager-for-woocommerce' ), $value );
+		} elseif ( $per_item ) {
+			/* translators: 1: discount rate, e.g. "$10.00"; 2: number of days. */
+			$note = sprintf( __( '%1$s off per item for over %2$s days', 'booking-and-rental-manager-for-woocommerce' ), $value, $days );
+		} else {
+			/* translators: 1: discount rate, e.g. "50%"; 2: number of days. */
+			$note = sprintf( __( '%1$s off for over %2$s days', 'booking-and-rental-manager-for-woocommerce' ), $value, $days );
+		}
+
+		return '(' . $note . ')';
+	}
+
+	/****************************************************
+	 * Discount Over X Days for one booking, or [].
+	 *
+	 * The base is the rental itself (duration + services) — never fees, the
+	 * refundable deposit or tax — so the booking summary and the cart agree.
+	 *
+	 * @param int   $post_id       Rental item.
+	 * @param int   $days          Days the booking is billed for.
+	 * @param float $rental_total  Rental subtotal the discount comes off.
+	 * @param int   $item_quantity Units a fixed discount is multiplied by.
+	 * @return array rbfw_get_discount_array() result; [] when none applies.
+	 ****************************************************/
+	function rbfw_booking_discount( $post_id, $days, $rental_total, $item_quantity = 1 ) {
+		if ( ! function_exists( 'rbfw_get_discount_array' ) || (float) $rental_total <= 0 || (int) $days <= 0 ) {
+			return array();
+		}
+		$discount = rbfw_get_discount_array( $post_id, (int) $days, (float) $rental_total, max( 1, (int) $item_quantity ) );
+		if ( ! is_array( $discount ) || empty( $discount['discount_amount'] ) ) {
+			return array();
+		}
+		// Older addon builds could discount past zero.
+		$discount['discount_amount'] = min( (float) $discount['discount_amount'], (float) $rental_total );
+		$discount['total_amount']    = (float) $rental_total - $discount['discount_amount'];
+		return $discount;
+	}
+
+	/****************************************************
+	 * Seasonal Pricing addon: per-item rates of a Multiple Items rental for the
+	 * season the pick-up date falls in.
+	 *
+	 * @param int    $post_id Multiple Items rental.
+	 * @param string $date    Pick-up date (any strtotime() format).
+	 * @return array item_name => [ 'hourly_price' => float, ... ] holding only the
+	 *               rates the season actually sets; [] outside every season.
+	 ****************************************************/
+	function rbfw_mi_seasonal_prices( $post_id, $date ) {
+		if ( ! function_exists( 'is_plugin_active' ) || ! is_plugin_active( 'booking-and-rental-manager-seasonal-pricing/rent-seasonal-pricing.php' ) ) {
+			return array();
+		}
+		$seasons = get_post_meta( $post_id, 'rbfw_multiple_items_sp', true );
+		$date_ts = $date ? strtotime( (string) $date ) : false;
+		if ( empty( $seasons ) || ! is_array( $seasons ) || false === $date_ts ) {
+			return array();
+		}
+		$ymd = gmdate( 'Y-m-d', $date_ts );
+		foreach ( $seasons as $season ) {
+			if ( empty( $season['start_date'] ) || empty( $season['end_date'] ) || empty( $season['item_prices'] ) || ! is_array( $season['item_prices'] ) ) {
+				continue;
+			}
+			$start = strtotime( $season['start_date'] );
+			$end   = strtotime( $season['end_date'] );
+			if ( false === $start || false === $end || $ymd < gmdate( 'Y-m-d', $start ) || $ymd > gmdate( 'Y-m-d', $end ) ) {
+				continue;
+			}
+			$prices = array();
+			foreach ( $season['item_prices'] as $row ) {
+				if ( empty( $row['item_name'] ) ) {
+					continue;
+				}
+				foreach ( array( 'hourly_price', 'daily_price', 'weekly_price', 'monthly_price' ) as $key ) {
+					if ( isset( $row[ $key ] ) && '' !== trim( (string) $row[ $key ] ) && is_numeric( $row[ $key ] ) ) {
+						$prices[ (string) $row['item_name'] ][ $key ] = (float) $row[ $key ];
+					}
+				}
+			}
+			return $prices; // First matching season wins, as for the other rent types.
+		}
+		return array();
+	}
+
 	/****************************************************
 	 * Check Discount Over Days Plugin Active
 	 ****************************************************/
@@ -3725,6 +4077,12 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
     $rbfw_enable_monthly_rate           = get_post_meta( $post_id, 'rbfw_enable_monthly_rate', true ) ;
     $rbfw_enable_weekly_rate           = get_post_meta( $post_id, 'rbfw_enable_weekly_rate', true );
 
+    // Seasonal rates for the monthly/weekly paths below (these return early, so the
+    // per-day seasonal lookup further down never runs for them). '' without the addon.
+    $rbfw_period_sp_prices = ( 'yes' === $rbfw_enable_monthly_rate || 'yes' === $rbfw_enable_weekly_rate )
+        ? rbfw_get_initial_rates( $post_id )[2]
+        : '';
+
     $endday = strtolower(gmdate('D', strtotime($end_date)));
     $diff = date_diff(new DateTime($pickup_datetime), new DateTime($dropoff_datetime));
 
@@ -3788,21 +4146,23 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
 
         if($rbfw_enable_day_threshold_for_monthly=='yes' && $remainingDays >= $rbfw_day_threshold_for_monthly){
             $thresold_month = $totalMonths+1;
-            $duration_price += $rbfw_monthly_rate * $thresold_month;
+            $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_m', $rbfw_monthly_rate, $start_date, $thresold_month, 'month' );
         }else{
-            $duration_price += $rbfw_monthly_rate * $totalMonths;
+            $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_m', $rbfw_monthly_rate, $start_date, $totalMonths, 'month' );
 
             if ($rbfw_enable_weekly_rate=='yes'){
 
                 $rbfw_enable_day_threshold_for_weekly   = get_post_meta( $post_id, 'rbfw_enable_day_threshold_for_weekly', true ) ? get_post_meta( $post_id, 'rbfw_enable_day_threshold_for_weekly', true ) : 'no';
                 $rbfw_day_threshold_for_weekly   = get_post_meta( $post_id, 'rbfw_day_threshold_for_weekly', true ) ? get_post_meta( $post_id, 'rbfw_day_threshold_for_weekly', true ) : '0';
                 $rbfw_weekly_rate   = get_post_meta( $post_id, 'rbfw_weekly_rate', true );
+                // Weeks follow the whole months, so the first week starts that many days in.
+                $weeks_offset_days  = $total_days - $remainingDays;
 
                 if($rbfw_enable_day_threshold_for_weekly=='yes' && $days >= $rbfw_day_threshold_for_weekly){
                     $thresold_Weeks = $weeks+1;
-                    $duration_price += $rbfw_weekly_rate * $thresold_Weeks;
+                    $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_w', $rbfw_weekly_rate, $start_date, $thresold_Weeks, 'week', $weeks_offset_days );
                 }else{
-                    $duration_price += $rbfw_weekly_rate * $weeks;
+                    $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_w', $rbfw_weekly_rate, $start_date, $weeks, 'week', $weeks_offset_days );
 
                     if ($rbfw_enable_daily_rate == 'yes'){
 
@@ -3813,11 +4173,11 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
                         if ( rbfw_md_hourly_rollover_applies( $rbfw_enable_hourly_threshold, $hours, $rbfw_hourly_threshold ) ) {
                             $actual_days = $days+1;
                             // Leftover days (day-wise aware; flat daily when day-wise is off).
-                            $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $actual_days, $rbfw_daily_rate );
+                            $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $actual_days, $rbfw_daily_rate, $rbfw_period_sp_prices );
                         }else{
                             $rbfw_hourly_rate = get_post_meta( $post_id, 'rbfw_hourly_rate', true );
                             $day_slug         = strtolower( gmdate( 'D', strtotime( $start_date ) ) );
-                            $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $days, $rbfw_daily_rate );
+                            $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $days, $days, $rbfw_daily_rate, $rbfw_period_sp_prices );
                             $duration_price  += rbfw_md_price_for_hours_period(
                                 $post_id,
                                 $hours,
@@ -3853,9 +4213,9 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
 
         if($rbfw_enable_day_threshold_for_weekly=='yes' && $daysWeeks >= $rbfw_day_threshold_for_weekly){
             $thresold_Weeks = $actualWeeks + 1;
-            $duration_price += $rbfw_weekly_rate * $thresold_Weeks;
+            $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_w', $rbfw_weekly_rate, $start_date, $thresold_Weeks, 'week' );
         }else{
-            $duration_price += $rbfw_weekly_rate * $actualWeeks;
+            $duration_price += rbfw_md_period_blocks_price( $rbfw_period_sp_prices, 'rbfw_sp_price_w', $rbfw_weekly_rate, $start_date, $actualWeeks, 'week' );
 
             if ($daysWeeks > 0 && $rbfw_enable_daily_rate == 'yes'){
 
@@ -3866,11 +4226,11 @@ function rbfw_md_duration_price_calculation($post_id = 0, $pickup_datetime = 0, 
                 if ( rbfw_md_hourly_rollover_applies( $rbfw_enable_hourly_threshold, $hours, $rbfw_hourly_threshold ) ) {
                     $thresold_days = $daysWeeks+1;
                     // Leftover days (day-wise aware; flat daily when day-wise is off).
-                    $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $thresold_days, $rbfw_daily_rate );
+                    $duration_price += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $thresold_days, $rbfw_daily_rate, $rbfw_period_sp_prices );
                 }else{
                     $rbfw_hourly_rate = get_post_meta( $post_id, 'rbfw_hourly_rate', true );
                     $day_slug         = strtolower( gmdate( 'D', strtotime( $start_date ) ) );
-                    $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $daysWeeks, $rbfw_daily_rate );
+                    $duration_price  += rbfw_daywise_days_sum( $post_id, $start_date, $total_days - $daysWeeks, $daysWeeks, $rbfw_daily_rate, $rbfw_period_sp_prices );
                     $duration_price  += rbfw_md_price_for_hours_period(
                         $post_id,
                         $hours,
@@ -4004,6 +4364,11 @@ function rbfw_md_is_half_day_hours( $post_id, $hours ) {
 function rbfw_md_price_for_hours_period( $post_id, $hours, $day, $date, $daily_rate, $hourly_rate, $seasonal_prices = '', $enable_daily = 'yes' ) {
     $hours = (float) $hours;
     if ( $hours <= 0 ) {
+        // No leftover hours: nothing to add. The weekly/monthly paths call this
+        // for the hours left after whole weeks/days, which is 0 for every
+        // date-only booking, so billing a day here charged one day too many.
+        // A same-day booking with a 0-hour span is billed the daily rate by
+        // its caller, rbfw_handle_hybrid_rate().
         return 0;
     }
 
@@ -4144,6 +4509,49 @@ function rbfw_handle_hybrid_rate($i, $post_id, $day, $date, $start_date, $end_da
     return $price;
 }
 
+/**
+ * Count how many of the billed rental days fall on a Saturday or Sunday, for
+ * a per-day fee whose "Apply On" is set to Weekends Only.
+ *
+ * $total_days (when passed) is preferred over re-deriving the day count from
+ * $start_date/$end_date, because it already matches whatever day the caller
+ * actually billed (e.g. resort's "count extra day" adjustment) -- counting
+ * weekends against a different day span than what was billed would silently
+ * disagree with the rest of the invoice.
+ *
+ * @param string $start_date  'Y-m-d' (or 'Y-m-d H:i[:s]') rental start date.
+ * @param string $end_date    Unused unless $total_days is not provided.
+ * @param int    $total_days  Number of billed days starting at $start_date.
+ * @return int Number of weekend days within that span.
+ */
+function rbfw_count_weekend_days( $start_date, $end_date = '', $total_days = 0 ) {
+    $start_date = substr( (string) $start_date, 0, 10 );
+    if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $start_date ) ) {
+        return 0;
+    }
+
+    $days = (int) $total_days;
+    if ( $days <= 0 ) {
+        $end_date = substr( (string) $end_date, 0, 10 );
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $end_date ) ) {
+            return 0;
+        }
+        $days = (int) round( ( strtotime( $end_date ) - strtotime( $start_date ) ) / DAY_IN_SECONDS ) + 1;
+    }
+    $days = max( 0, $days );
+
+    $weekend_count = 0;
+    $cursor        = strtotime( $start_date );
+    for ( $i = 0; $i < $days; $i++ ) {
+        $weekday = (int) gmdate( 'N', $cursor + ( $i * DAY_IN_SECONDS ) ); // ISO-8601: 6=Sat, 7=Sun
+        if ( $weekday >= 6 ) {
+            $weekend_count++;
+        }
+    }
+
+    return $weekend_count;
+}
+
 function rbfw_get_time_diff_in_hours($start, $end) {
     $diff = date_diff(new DateTime($start), new DateTime($end));
     return $diff->h + ($diff->i / 60);
@@ -4192,20 +4600,109 @@ function rbfw_get_day_rate($post_id, $day, $daily_rate, $seasonal_prices, $date,
  * weekday without a day-wise override, so for an item with day-wise pricing OFF
  * the total equals $daily_rate * $count exactly — identical to the old code.
  *
+ * Seasonal daily rates apply to a leftover day only when $seasonal_prices is
+ * passed AND the season covering that date has a daily rate; otherwise the
+ * regular (day-wise / flat) rate is used, exactly as before.
+ *
  * @return float
  */
-function rbfw_daywise_days_sum( $post_id, $start_date, $offset, $count, $daily_rate ) {
+function rbfw_daywise_days_sum( $post_id, $start_date, $offset, $count, $daily_rate, $seasonal_prices = '' ) {
     $sum = 0.0;
     for ( $j = 0; $j < (int) $count; $j++ ) {
         $day_offset = (int) $offset + $j;
         $date       = gmdate( 'Y-m-d', strtotime( "+{$day_offset} day", strtotime( $start_date ) ) );
         $slug       = strtolower( gmdate( 'D', strtotime( $date ) ) );
-        // Seasonal pricing is intentionally not applied here — the monthly/weekly
-        // leftover path never applied it before, so passing '' keeps behaviour
-        // identical for non-day-wise items.
+        $sp_rate    = rbfw_md_seasonal_period_rate( $seasonal_prices, $date, 'rbfw_sp_price_d' );
+        if ( null !== $sp_rate ) {
+            $sum += $sp_rate;
+            continue;
+        }
         $sum += rbfw_get_day_rate( $post_id, $slug, $daily_rate, '', $date );
     }
     return $sum;
+}
+
+/**
+ * Seasonal rate for one billing unit (a day, week or month) starting on $date.
+ *
+ * Takes the first season whose date range covers $date — the same "first listed
+ * wins" rule check_seasonal_price() uses. A season that leaves the requested
+ * rate blank (or 0) yields null so the caller falls back to the item's regular
+ * rate: seasons saved before weekly/monthly seasonal rates existed keep pricing
+ * exactly as they did.
+ *
+ * @param mixed  $seasonal_prices 'rbfw_seasonal_prices' meta ('' when the addon is off).
+ * @param string $date            Y-m-d the billing unit starts on.
+ * @param string $field           rbfw_sp_price_d | rbfw_sp_price_w | rbfw_sp_price_m.
+ * @return float|null Positive seasonal rate, or null when none applies.
+ */
+function rbfw_md_seasonal_period_rate( $seasonal_prices, $date, $field ) {
+    if ( empty( $seasonal_prices ) || ! is_array( $seasonal_prices ) ) {
+        return null;
+    }
+
+    $timestamp = strtotime( $date );
+    if ( false === $timestamp ) {
+        return null;
+    }
+
+    foreach ( $seasonal_prices as $season ) {
+        if ( ! is_array( $season ) || empty( $season['rbfw_sp_start_date'] ) || empty( $season['rbfw_sp_end_date'] ) ) {
+            continue;
+        }
+        $season_start = strtotime( $season['rbfw_sp_start_date'] );
+        $season_end   = strtotime( $season['rbfw_sp_end_date'] );
+        if ( false === $season_start || false === $season_end || $timestamp < $season_start || $timestamp > $season_end ) {
+            continue;
+        }
+
+        $rate = ( isset( $season[ $field ] ) && is_numeric( $season[ $field ] ) ) ? (float) $season[ $field ] : 0.0;
+        if ( $rate <= 0 ) {
+            return null;
+        }
+
+        // Lets the booking form show its "seasonal pricing applied" note.
+        set_transient( 'pricing_applied', 'sessional', 3600 );
+
+        return $rate;
+    }
+
+    return null;
+}
+
+/**
+ * Price $count whole weeks or months. Each block is charged the seasonal rate of
+ * the season its first day falls in, otherwise the item's regular rate.
+ *
+ * With no seasonal prices this is the original `$regular_rate * $count`.
+ *
+ * @param mixed  $seasonal_prices 'rbfw_seasonal_prices' meta ('' when the addon is off).
+ * @param string $field           rbfw_sp_price_w | rbfw_sp_price_m.
+ * @param mixed  $regular_rate    The item's weekly / monthly rate.
+ * @param string $start_date      Y-m-d the booking starts on.
+ * @param int    $count           Number of blocks to bill.
+ * @param string $unit            'week' or 'month'.
+ * @param int    $offset_days     Days between $start_date and the first block (weeks that follow whole months).
+ * @return float|int
+ */
+function rbfw_md_period_blocks_price( $seasonal_prices, $field, $regular_rate, $start_date, $count, $unit, $offset_days = 0 ) {
+    if ( empty( $seasonal_prices ) ) {
+        return $regular_rate * $count;
+    }
+
+    $regular_rate = (float) $regular_rate;
+    $base         = strtotime( $start_date );
+    $total        = 0.0;
+    for ( $k = 0; $k < (int) $count; $k++ ) {
+        $modifier = ( 'month' === $unit )
+            ? "+{$k} month"
+            : '+' . ( (int) $offset_days + 7 * $k ) . ' day';
+        $date     = gmdate( 'Y-m-d', strtotime( $modifier, $base ) );
+        $sp_rate  = rbfw_md_seasonal_period_rate( $seasonal_prices, $date, $field );
+        $total   += ( null !== $sp_rate ) ? $sp_rate : $regular_rate;
+    }
+
+    return $total;
 }
 
 function rbfw_get_half_day_rate($post_id, $day, $rbfw_half_day_rate, $seasonal_prices, $date, $hours = 0, $enable_daily = 'yes') {
@@ -4675,7 +5172,8 @@ function rbfw_trim_zeros_number( $number ) {
 	return rtrim( rtrim( number_format( (float) $number, 4, '.', '' ), '0' ), '.' );
 }
 
-function rbfw_security_deposit( $post_id, $sub_total_price ) {
+/** Calculate a deposit for the rental subtotal and the booked unit count. */
+function rbfw_security_deposit( $post_id, $sub_total_price, $quantity = 1 ) {
 		$security_deposit_amount      = 0;
 		$security_deposit_desc        = 0;
 		$rbfw_enable_security_deposit = get_post_meta( $post_id, 'rbfw_enable_security_deposit', true ) ? get_post_meta( $post_id, 'rbfw_enable_security_deposit', true ) : 'no';
@@ -4686,7 +5184,8 @@ function rbfw_security_deposit( $post_id, $sub_total_price ) {
 				$security_deposit_amount = $rbfw_security_deposit_amount * $sub_total_price / 100;
 				$security_deposit_desc   = wc_price( $security_deposit_amount );
 			} else {
-				$security_deposit_amount = $rbfw_security_deposit_amount;
+				$per_quantity = 'yes' === get_post_meta( $post_id, 'rbfw_security_deposit_per_quantity', true );
+				$security_deposit_amount = max( 0, (float) $rbfw_security_deposit_amount ) * ( $per_quantity ? max( 0, (int) $quantity ) : 1 );
 				$security_deposit_desc   = wc_price( $security_deposit_amount );
 			}
 		}
@@ -5513,9 +6012,6 @@ if ( ! function_exists( 'rbfw_clean_variations_data' ) ) {
 				continue;
 			}
 			$label = isset( $row['field_label'] ) ? trim( (string) $row['field_label'] ) : '';
-			if ( '' === $label ) {
-				continue; // No label -> unusable, skip it.
-			}
 			// Keep only value entries that actually carry a name; normalise quantity + price.
 			$values = array();
 			if ( ! empty( $row['value'] ) && is_array( $row['value'] ) ) {
@@ -5557,8 +6053,21 @@ if ( ! function_exists( 'rbfw_clean_variations_data' ) ) {
 					$values[] = $clean_val;
 				}
 			}
-			$row['value'] = $values;
-			$clean[]      = $row;
+			if ( '' === $label ) {
+				// The admin UI no longer shows a required "Field Label" box per group
+				// (it's just an "Item Variations" chip list now), so a blank label no
+				// longer means "untouched row" — it means "admin didn't bother naming
+				// the group". Only an ALSO-empty group (no real chips either) is the
+				// genuinely blank "add new" row this function was written to drop;
+				// a group with real chips gets an auto label instead of losing its data.
+				if ( empty( $values ) ) {
+					continue;
+				}
+				$label = __( 'Item Variation', 'booking-and-rental-manager-for-woocommerce' );
+			}
+			$row['field_label'] = $label;
+			$row['value']       = $values;
+			$clean[]            = $row;
 		}
 		return $clean;
 	}

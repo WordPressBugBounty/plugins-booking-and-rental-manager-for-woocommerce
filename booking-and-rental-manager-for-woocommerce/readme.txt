@@ -3,7 +3,7 @@ Contributors: magepeopleteam, aamahin, raselsha, rabiul042
 Plugin link: https://mage-people.com/
 Tags: woocommerce rental, rental booking, booking calendar, car rental, bike rental
 Requires at least: 5.3
-Stable tag: 2.8.0
+Stable tag: 2.8.1
 Tested up to: 7.0
 Requires PHP: 7.0
 License: GPLv2 or later
@@ -20,7 +20,7 @@ Use it for car rentals, bike rentals, equipment rentals, dress rentals, appointm
 = Demo and documentation =
 
 * [Frontend live demo](https://wprently.com/)
-* [Documentation](https://docs.mage-people.com/plugins/wprently/overview)
+* [Documentation](https://docs.mage-people.com/docs/wprently/)
 * [Pro version](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
 
 = What you can build =
@@ -56,11 +56,26 @@ Use it for car rentals, bike rentals, equipment rentals, dress rentals, appointm
 
 = Pro features =
 
-* Booking calendar with order details
-* Reports with order details
-* CSV export for reports
-* PDF booking receipts
-* Booking-related email features
+* Delivery & collection charges
+* Registration forms
+* Drag-and-drop form builder
+* Request booking (quote and approval)
+* Item reviews
+* Customer portal
+* Edit a booking after purchase
+* Choose visible columns
+* Security deposit ledger
+* Edit stock from the inventory screen
+* Booking calendar
+* Google Calendar sync
+* A4 PDF receipt
+* Thermal / POS receipt
+* Customisable PDF templates
+* WooCommerce booking email
+* Quote request emails
+* Google review request email
+* Reports page
+* Bookings export
 
 [View Pro version](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
 
@@ -116,9 +131,10 @@ The plugin is designed to work with standards-compliant WordPress themes.
 
 = Compatible third-party integrations =
 
-SecureHold WP 3.4.11 or later can use a fixed security deposit configured on a rental item as a separate Stripe authorization hold. The compatible fixed deposit is not added to the WooCommerce payable total; percentage-based and otherwise unsupported deposits continue through the normal WpRently checkout flow.
+SecureHold WP 3.4.11+ can hold a fixed WpRently security deposit as a separate Stripe authorization instead of adding it to the WooCommerce total, once WooCommerce checkout, the Stripe Gateway and SecureHold's MagePeople compatibility option are all set up; see [SecureHold docs](https://secureholdwp.com/docs/) for setup help.
 
-Requirements: WooCommerce checkout mode, the official WooCommerce Stripe Gateway, SecureHold's own Stripe API keys in the same test/live mode, a linked WooCommerce rental product, a fixed WpRently security deposit, and the MagePeople compatibility option enabled in SecureHold. Until all of these are in place, and always in the Standalone checkout, WpRently keeps charging the deposit as part of the booking total. Set SecureHold's Default Hold Amount to 0 (Rent Item > Settings > Integrations offers this in one click) so it does not add its own hold to rentals whose percentage deposit WpRently already charges. Make sure Stripe's authorization duration is suitable for the rental period. See the [SecureHold documentation](https://secureholdwp.com/docs/) or [SecureHold support](https://secureholdwp.com/support/) for setup help.
+In each Rent Item's Security Deposit settings, "Multiply fixed deposit by booked quantity" charges the fixed amount for every booked unit, including each room or multiple-item unit. It is off for existing items; percentage deposits continue to use the rental subtotal. SecureHold's static hold does not support this option and requires a compatible SecureHold update to fall back to WpRently checkout.
+
 
 == Installation ==
 
@@ -156,9 +172,17 @@ Yes. Use the included `[rent-list]` and `[rent-add-to-cart]` shortcodes to place
 5. Rental list layout for browsing available items.
 6. Booking order details in the admin area.
 
+== Addons for this plugin ==
+
+* [Booking and Rental Manager Pro](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-pro/)
+* [Addon: Seasonal Pricing](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-addon-seasonal-pricing/) — Apply different rental prices based on seasons, dates, or time ranges.
+* [Addon: Backend Order](https://mage-people.com/product/backend-order-addon-wprently/) — Create and manage rental orders directly from the admin dashboard.
+* [Addon: Min and Max Booking Day](https://mage-people.com/product/min-and-max-booking-day-for-booking-and-rental-plugin/) — Set minimum and maximum booking limits for rental items.
+* [Addon: Discount Over X Days](https://mage-people.com/product/pricing-discount-over-x-day-addon-for-rental-and-booking-plugin/) — Set discounts based on the number of rental days.
+* [Addon: Multi Day Price Saver](https://mage-people.com/product/multi-day-price-saver-addon-for-wprently/) — Offer special discounts for multi-day rentals to encourage longer bookings.
+
 == Other plugins ==
 
-* [Booking and Rental Manager for WooCommerce Addon: Seasonal Pricing](https://mage-people.com/product/booking-and-rental-manager-for-woocommerce-addon-seasonal-pricing/)
 * [Bus Booking Manager](https://wordpress.org/plugins/bus-booking-manager/)
 * [Bus Ticket Booking with Seat Reservation](https://wordpress.org/plugins/bus-ticket-booking-with-seat-reservation/)
 * [WooCommerce Events Manager](https://wordpress.org/plugins/mage-eventpress/)
@@ -171,6 +195,26 @@ Appneck SDK *does not gather any data by default.* The SDK only starts gathering
 Learn more about how [Appsero collects and uses data](https://appneck.com/privacy-policy/).
 
 == Changelog ==
+= 2.8.1 =
+* **Fixed: The Seasonal Pricing, Discount Over X Days and Min & Max Booking Day addons were saved in the editor but ignored, or priced inconsistently, on the booking forms themselves (Resort, Multiple Items and Multi Day).** Resort room pricing wasn't reading seasonal rates at all; a Resort booking with more than one room type could total the wrong amount under seasonal/tiered pricing; a blank seasonal rate billed a free night; Discount Over X Days never showed on the Resort summary; "Sessional pricing applied" could leak between visitors; a sold-out room could block the cart from reading rooms listed after it; and a Multiple Items discount badge could show without the discount actually being applied. Booking totals on tax-inclusive shops could also save as empty. All of these now price the same way on the booking form as they do in the cart.
+* Updated the bundled Appneck SDK to the latest version.
+* **Fixed: Buffer Time After was ignored on Single Day rentals with hourly time slots ("Manage inventory as timely").** A new booking could start the moment the previous one ended. The item now stays unavailable for the buffer after every booking, and a new booking must also end at least that long before the next one starts. The time picker, calendar, cart and checkout all apply it. Note that Buffer Time Before is a lead time from the current time, not a gap between bookings.
+* Security: Quantities posted from the booking forms must now be whole numbers. Negative, fractional or malformed quantities are refused instead of pricing a booking at zero or at a fraction of its value.
+* New: Same day booking cutoff time (Settings > General). Once it passes, today can no longer be booked and the earliest pickup is tomorrow. Past dates, today when same day booking is off, and today after the cutoff are now also refused at add to cart, in the cart and at checkout, not only in the date picker. Items with admin-set fixed dates are not affected.
+* New: Optional per-item fixed security deposit multiplied by booked quantity. The rental form and checkout use the selected room, item, or rental count; existing fixed and percentage deposits retain their behavior.
+* New: Seasonal weekly and monthly rates for multi-day items (with the Seasonal Pricing addon). Each billed week or month uses the rate of the season it starts in; previously a season had no effect on bookings billed by the week or month. A season without these rates keeps using the item's regular weekly or monthly rate.
+* New: "Charge base price per variation unit" for multi-day items with item variations. When on, the rental price is charged once per variation unit chosen, so three bikes in different sizes are billed as three bikes. It is off by default, so existing items keep their prices. The booking summary now also shows how the variation and duration costs were worked out.
+* Improved: On items that have a Quantity selector, the selector now sets the quantity, and the size or color steppers must add up to it before Book Now is enabled.
+* Fixed: Items with more than one variation group (for example Color and Size) shared one quantity between the groups, and on items without a Quantity selector the booked quantity stayed at 1.
+* Fixed: Variation groups saved without a label were dropped. They are now kept with the label "Item Variation".
+* Fixed: Single Day rental options without timely inventory or variations: the stock set for each option on the Pricing tab is now enforced at add to cart, including other cart items for the same date.
+* Fixed: Multiple Items bookings could be billed at the wrong rate when the duration passed more than one hourly, daily, weekly or monthly threshold.
+* Improved: Saving an item now blocks an hourly price without the time picker, which had no effect on the booking form, and requires a Rent Item Stock Quantity when a Single Day item shares one stock count based on booking time.
+* Improved: Redesigned Order Received page, date picker popup, duration summary and FAQ section (with Load More after five questions).
+* Improved: Modern editor: redesigned Pricing, Item Variations, Extra Services and Off Day settings, and the Frontend Preview now includes location and security deposit charges and greys out off days on multi-day dates.
+* Fixed: Modern editor: a duplicate stock quantity field could appear for items with old hourly inventory settings, and the day-wise extra service summary did not show the multiplied total.
+* Improved: Updated demo, documentation and addon links.
+
 = 2.8.0 =
 * **New: SecureHold WP integration (highlight of this release).** A fixed WpRently security deposit can now be held on the customer's card as a separate Stripe authorization hold through SecureHold WP 3.4.11 or later, instead of being charged with the booking. The customer pays only the rental; the hold is released automatically, or you can capture it from SecureHold if needed.
 * New: Settings > Integrations runs every SecureHold setup step in place, without leaving the page: installing or activating WooCommerce, SecureHold and the official Stripe gateway, switching bookings to the WooCommerce checkout, enabling SecureHold's MagePeople compatibility, and turning off SecureHold's global default hold so it only holds WpRently deposits. The panel reports Ready only when the Stripe gateway and SecureHold's own Stripe keys are set in the same mode.

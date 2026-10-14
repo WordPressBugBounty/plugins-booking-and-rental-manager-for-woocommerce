@@ -506,7 +506,7 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 					'step_title_inventory'          => __( 'Inventory', 'booking-and-rental-manager-for-woocommerce' ),
 					'step_text_inventory'           => __( 'Manage stock quantity, return-date availability and item variations.', 'booking-and-rental-manager-for-woocommerce' ),
 					'step_title_buffer'             => __( 'Buffer time', 'booking-and-rental-manager-for-woocommerce' ),
-					'step_text_buffer'              => __( 'Reserve extra hours before and after each booking for cleaning or turnaround.', 'booking-and-rental-manager-for-woocommerce' ),
+					'step_text_buffer'              => __( 'Set the minimum notice before a pickup and the turnaround time kept free after each booking.', 'booking-and-rental-manager-for-woocommerce' ),
 					'step_title_fees'               => __( 'Fee management', 'booking-and-rental-manager-for-woocommerce' ),
 					'step_text_fees'                => __( 'Add extra fees with their own calculation type and frequency.', 'booking-and-rental-manager-for-woocommerce' ),
 
@@ -682,6 +682,18 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 				'rbfw_enable_pick_point',
 			];
 
+			// An Hourly Price left "On" with the Time Picker "Off" is silently inert
+			// on the front end — see get_pricing_validation_errors() above, which
+			// already raised this in $pricing_errors. The rest of the save still
+			// proceeds (per the comment above $pricing_errors), but this one field
+			// is excluded so the save can never PERSIST that specific invalid
+			// combination; any other value already stored is left untouched.
+			$hourly_blocked = isset( $_POST['rbfw_enable_hourly_rate'] ) && $_POST['rbfw_enable_hourly_rate'] === 'yes'
+				&& ! ( isset( $_POST['rbfw_enable_time_picker'] ) && $_POST['rbfw_enable_time_picker'] === 'yes' );
+			if ( $hourly_blocked ) {
+				$meta_keys = array_diff( $meta_keys, [ 'rbfw_enable_hourly_rate' ] );
+			}
+
 			foreach ( $meta_keys as $key ) {
 				if ( isset( $_POST[ $key ] ) ) {
 					update_post_meta( $post_id, $key, sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) );
@@ -724,6 +736,7 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 						'calculation_type' => sanitize_text_field( wp_unslash( $fee['calculation_type'] ?? 'fixed' ) ),
 						'amount'           => floatval( $fee['amount'] ?? 0 ),
 						'frequency'        => sanitize_text_field( wp_unslash( $fee['frequency']        ?? 'one-time' ) ),
+						'apply_on'         => sanitize_text_field( wp_unslash( $fee['apply_on']         ?? 'all-days' ) ),
 						'priority'         => sanitize_text_field( wp_unslash( $fee['priority']         ?? 'optional' ) ),
 						'refundable'       => sanitize_text_field( wp_unslash( $fee['refundable']       ?? 'no' ) ),
 						'color'            => sanitize_text_field( wp_unslash( $fee['color']            ?? 'security' ) ),
@@ -874,6 +887,9 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 			$rbfw_enable_variations = ( isset( $_POST['rbfw_enable_variations'] ) && $_POST['rbfw_enable_variations'] === 'yes' ) ? 'yes' : 'no';
 			update_post_meta( $post_id, 'rbfw_enable_variations', $rbfw_enable_variations );
 
+			$rbfw_variation_multiply_base = ( isset( $_POST['rbfw_variation_multiply_base'] ) && 'yes' === sanitize_text_field( wp_unslash( $_POST['rbfw_variation_multiply_base'] ) ) ) ? 'yes' : 'no';
+			update_post_meta( $post_id, 'rbfw_variation_multiply_base', $rbfw_variation_multiply_base );
+
 			$rbfw_variations_data = [];
 			if ( isset( $_POST['rbfw_variations_data'] ) && is_array( $_POST['rbfw_variations_data'] ) ) {
 				$rbfw_variations_data = rbfw_clean_variations_data( RBFW_Function::data_sanitize( wp_unslash( $_POST['rbfw_variations_data'] ) ) );
@@ -914,6 +930,8 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 			update_post_meta( $post_id, 'rbfw_security_deposit_type', $deposit_type );
 			$deposit_amount = isset( $_POST['rbfw_security_deposit_amount'] ) ? absint( $_POST['rbfw_security_deposit_amount'] ) : 0;
 			update_post_meta( $post_id, 'rbfw_security_deposit_amount', $deposit_amount );
+			$deposit_per_quantity = ( isset( $_POST['rbfw_security_deposit_per_quantity'] ) && 'yes' === sanitize_text_field( wp_unslash( $_POST['rbfw_security_deposit_per_quantity'] ) ) ) ? 'yes' : 'no';
+			update_post_meta( $post_id, 'rbfw_security_deposit_per_quantity', $deposit_per_quantity );
 
 			/* Front-end Display Settings enable toggle */
 			$frontend_display_enable = ( isset( $_POST['rbfw_enable_frontend_display'] ) && $_POST['rbfw_enable_frontend_display'] === 'yes' ) ? 'yes' : 'no';
@@ -1223,7 +1241,7 @@ if ( ! class_exists( 'RBFW_Modern_Editor' ) ) {
 				'rbfw_item_quantity', 'rbfw_enable_md_type_item_qty', 'rbfw_enable_extra_service_qty',
 				'rbfw_item_stock_quantity', 'stock_manage_on_return_date', 'rbfw_enable_variations',
 				'rbfw_enable_security_deposit', 'rbfw_security_deposit_type',
-				'rbfw_security_deposit_amount', 'rbfw_security_deposit_label',
+				'rbfw_security_deposit_amount', 'rbfw_security_deposit_label', 'rbfw_security_deposit_per_quantity',
 				'rbfw_enable_faq_content', 'rbfw_enable_term_content', 'rbfw_item_terms_conditions',
 				'rbfw_enable_pick_point',
 				'rbfw_enable_additional_gallary',

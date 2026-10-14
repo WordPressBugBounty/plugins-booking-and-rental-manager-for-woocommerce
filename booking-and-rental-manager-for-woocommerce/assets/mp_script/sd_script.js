@@ -1,3 +1,20 @@
+function rbfwSdDepositQuantity() {
+    if (jQuery('#rbfw_security_deposit_per_quantity').val() !== 'yes') return 1;
+    var $rentTypes = jQuery('.rbfw_bikecarsd_qty');
+    if ($rentTypes.length) {
+        var rentedUnits = 0;
+        $rentTypes.each(function () { rentedUnits += Math.max(0, parseInt(jQuery(this).val(), 10) || 0); });
+        return rentedUnits;
+    }
+    var $variations = jQuery('.rbfw-variation-qty-input');
+    if ($variations.length) {
+        var units = 0;
+        $variations.each(function () { units += Math.max(0, parseInt(jQuery(this).val(), 10) || 0); });
+        return units;
+    }
+    return Math.max(0, parseInt(jQuery('#rbfw_item_quantity').val(), 10) || 0);
+}
+
 /* Stock cap reader, shared with md_script.js (which loads first). Defined here
    defensively so this file still reads a cap correctly on its own: an absent or
    blank max means the row does not track stock (no cap), while a literal max="0"
@@ -28,7 +45,7 @@ if (typeof rbfwStepMax !== 'function') {
                 minDate: 0,
                 beforeShowDay: function(date)
                 {
-                    return rbfw_off_day_dates(date,'md',rbfw_js_variables.rbfw_today_booking_enable);
+                    return rbfw_off_day_dates(date,'md',rbfw_today_booking_enable());
                 },
                 onSelect: function (dateString, data) {
                     let date_ymd = data.selectedYear + '-' + ('0' + (parseInt(data.selectedMonth) + 1)).slice(-2) + '-' + ('0' + parseInt(data.selectedDay)).slice(-2);
@@ -279,7 +296,15 @@ if (typeof rbfwStepMax !== 'function') {
             let service_type = jQuery(this).data('text');
             let service_price = jQuery(this).data('price');
 
-            var  quantity_options = '';
+            // An item with variations (Color/Size steppers) gets an unselected
+            // placeholder first: the steppers stay locked (see
+            // rbfwVariationGroupCap() in rbfw_script.js) until a real quantity is
+            // chosen here, which then caps how much can be distributed across them.
+            // An item without variations keeps the old default-to-1 behavior.
+            var hasVariations = jQuery('.rbfw-variation-qty-input').length > 0;
+            var  quantity_options = hasVariations
+                ? '<option value="">Choose number of quantity</option>'
+                : '';
             for (let i = 1; i <= available_quantity; i++) {
                 quantity_options += "<option value="+i+">"+i+"</option>";
             }
@@ -342,6 +367,16 @@ if (typeof rbfwStepMax !== 'function') {
 
             jQuery("#rbfw_service_price").val(total.toFixed(2));
             rbfw_price_calculation_sd();
+
+            // The toggle-switch row sets its hidden qty input's value directly
+            // (above), without an input/change event the generic rbfw_script.js
+            // listener could catch — so when variations are present, correct the
+            // Book Now state it just set with the cap-aware rule (every unit must
+            // be assigned a variant before booking).
+            if (jQuery('.rbfw-variation-qty-input').length && typeof window.rbfwVariationRecalc === 'function') {
+                var $rtForm = jQuery('.rbfw_bikecarsd_qty').first().closest('form');
+                window.rbfwVariationRecalc($rtForm.length ? $rtForm : jQuery(document));
+            }
         }
 
 
@@ -636,6 +671,16 @@ function calculateTotal() {
     // Display total somewhere (create #total_price element if needed)
     jQuery("#rbfw_service_price").val(total.toFixed(2));
     rbfw_price_calculation_sd();
+
+    // This runs on every row-quantity keystroke/+/-, same delegated "input" event
+    // rbfw_script.js listens on for this selector — but that listener was
+    // registered first (rbfw_script loads before sd_script), so it fires and
+    // sets the correct cap-aware Book Now state BEFORE the plain hasQty check
+    // above runs and overwrites it again. Re-apply the cap-aware rule last.
+    if (jQuery('.rbfw-variation-qty-input').length && typeof window.rbfwVariationRecalc === 'function') {
+        var $rtForm = jQuery('.rbfw_bikecarsd_qty').first().closest('form');
+        window.rbfwVariationRecalc($rtForm.length ? $rtForm : jQuery(document));
+    }
 }
 
 
@@ -720,6 +765,18 @@ function rbfw_price_calculation_sd(){
 
     jQuery('.duration-costing span').text(wc_price_rbfw(rbfw_service_price));
 
+    // Seasonal Pricing addon: flag the Duration Cost line when a chosen option is
+    // priced by a season, as the Multiple Day summary does. Options carry
+    // data-seasonal="1" for the selected date -- the timely option cards (set
+    // from rbfw_service_type_timely_stock) and the slot table's qty inputs.
+    var rbfwSeasonalApplied = jQuery('.single-type-timely.selected[data-seasonal="1"]').length > 0;
+    jQuery('.rbfw_bikecarsd_qty[data-seasonal="1"]').each(function () {
+        if ((parseInt(jQuery(this).val(), 10) || 0) > 0) {
+            rbfwSeasonalApplied = true;
+        }
+    });
+    jQuery('.rbfw_bikecarsd_price_summary .rbfw_pricing_applied.sessional').toggle(rbfwSeasonalApplied);
+
     // Resource Cost line — value AND visibility, in one place.
     //
     // Every add-on control funnels through this function, but only some of the callers used
@@ -758,7 +815,7 @@ function rbfw_price_calculation_sd(){
         if (jQuery('#rbfw_security_deposit_type').val() == 'percentage'){
             rbfw_security_deposit_actual_amount = (rbfw_security_deposit_amount / 100) * sub_total_price;
         }else{
-            rbfw_security_deposit_actual_amount = rbfw_security_deposit_amount;
+            rbfw_security_deposit_actual_amount = (parseFloat(rbfw_security_deposit_amount) || 0) * rbfwSdDepositQuantity();
         }
     }
 
@@ -787,6 +844,8 @@ function rbfw_price_calculation_sd(){
     if(rbfw_security_deposit_actual_amount){
         jQuery('.security_deposit').show();
         jQuery('.security_deposit span').html(wc_price_rbfw(parseFloat(rbfw_security_deposit_actual_amount)));
+    }else{
+        jQuery('.security_deposit').hide();
     }
 
 
@@ -803,7 +862,7 @@ function datepicker_inline(){
         selectOtherMonths: true,
         beforeShowDay: function(date)
         {
-            return rbfw_off_day_dates(date,'md',rbfw_js_variables.rbfw_today_booking_enable);
+            return rbfw_off_day_dates(date,'md',rbfw_today_booking_enable());
         },
         onSelect: function (dateString, data) {
             let date_ymd = data.selectedYear + '-' + ('0' + (parseInt(data.selectedMonth) + 1)).slice(-2) + '-' + ('0' + parseInt(data.selectedDay)).slice(-2);
@@ -970,16 +1029,30 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
                 if (service_info[type]) {
                     // Update attributes
                     $el.attr('data-price', service_info[type].price);
+                    $el.attr('data-seasonal', service_info[type].seasonal ? '1' : '0');
                     $el.attr('data-available_quantity', service_info[type].stock);
 
+                    $el.find('.rbfw-opt-sticker').remove();
+                    $el.removeClass('rbfw-opt--soldout rbfw-opt--past rbfw-opt--lead').removeAttr('aria-disabled');
+
                     if(service_info[type].stock <= 0){
-                        $el.find('.rent-type').html(type + '<span class="solded">'+ rbfw_translation.sold_out +'</span>');
+                        // A fixed-time option whose start has passed today (site timezone)
+                        // or falls inside the lead time is not sold out, just unavailable.
+                        var sticker = { state: 'soldout', icon: 'fa-ban', label: rbfw_translation.sold_out || 'Sold Out' };
+                        if (service_info[type].unavailable === 'past') {
+                            sticker = { state: 'past', icon: 'fa-clock-rotate-left', label: rbfw_translation.past_time || 'Past Time' };
+                        } else if (service_info[type].unavailable === 'lead_time') {
+                            sticker = { state: 'lead', icon: 'fa-hourglass-half', label: rbfw_translation.not_available || 'Not available' };
+                        }
+                        $el.find('.rent-type').text(type);
+                        $el.append(
+                            jQuery('<span class="rbfw-opt-sticker"></span>')
+                                .addClass('rbfw-opt-sticker--' + sticker.state)
+                                .append(jQuery('<i class="fas" aria-hidden="true"></i>').addClass(sticker.icon))
+                                .append(jQuery('<span></span>').text(sticker.label))
+                        );
 
-                        $el.addClass('rbfw-sold-out');
-
-
-
-
+                        $el.addClass('rbfw-sold-out rbfw-opt--' + sticker.state).attr('aria-disabled', 'true');
                     }else{
                         $el.find('.rent-type').text(type);
 
@@ -1045,5 +1118,3 @@ function rbfw_service_type_timely_stock_ajax(post_id,start_date,start_time='',en
         }
     });
 }
-
-

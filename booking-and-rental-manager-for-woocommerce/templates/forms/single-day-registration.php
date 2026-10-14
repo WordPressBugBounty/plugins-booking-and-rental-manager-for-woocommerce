@@ -48,7 +48,11 @@
         <!--    Right Side-->
 		<div class="rbfw-single-right-container rbfw_bikecarsd_pricing_table_wrap">
 			<form action="" method='post' class="mp_rbfw_ticket_form">
-                <?php if ($location_switch == 'yes' && !empty($pickup_location)) : ?>
+                <?php include RBFW_TEMPLATE_PATH . 'forms/sd-pricing-info.php'; ?>
+                <?php /* Pickup/Drop-off Location doesn't apply to Appointment items
+                        (a fixed business location) -- this template is shared with
+                        Single Day, so exclude that type explicitly here. */ ?>
+                <?php if ($rbfw_rent_type !== 'appointment' && $location_switch == 'yes' && !empty($pickup_location)) : ?>
                     <div class="item">
                         <div class="rbfw-single-right-heading"><?php esc_html_e('Pickup Location','booking-and-rental-manager-for-woocommerce'); ?></div>
                         <div class="item-content rbfw-location">
@@ -62,7 +66,7 @@
                     </div>
                 <?php endif; ?>
 
-                <?php if ($location_switch == 'yes' && !empty($dropoff_location)) : ?>
+                <?php if ($rbfw_rent_type !== 'appointment' && $location_switch == 'yes' && !empty($dropoff_location)) : ?>
                     <div class="item">
                         <div class="rbfw-single-right-heading">
                             <?php esc_html_e('Drop-off Location','booking-and-rental-manager-for-woocommerce'); ?>
@@ -126,13 +130,27 @@
                     <div class="item rbfw-bikecarsd-step" data-step="1">
                         <div id="rbfw-bikecarsd-calendar" class="rbfw-bikecarsd-calendar">
                         </div>
+                        <div class="rbfw-bikecarsd-calendar-legend">
+                            <span class="rbfw-bikecarsd-calendar-legend-item">
+                                <span class="rbfw-bikecarsd-calendar-legend-swatch rbfw-is-selected"></span>
+                                <?php esc_html_e( 'Selected', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                            </span>
+                            <span class="rbfw-bikecarsd-calendar-legend-item">
+                                <span class="rbfw-bikecarsd-calendar-legend-swatch rbfw-is-offday"></span>
+                                <?php esc_html_e( 'Off day', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                            </span>
+                            <span class="rbfw-bikecarsd-calendar-legend-item">
+                                <span class="rbfw-bikecarsd-calendar-legend-swatch rbfw-is-weekend"></span>
+                                <?php esc_html_e( 'Weekend', 'booking-and-rental-manager-for-woocommerce' ); ?>
+                            </span>
+                        </div>
                         <div class="rbfw-bikecarsd-calendar-footer">
                             <i class="fas fa-circle-info"></i>
                             <?php rbfw_string('rbfw_text_click_date_to_browse_availability',__('Click a date to browse availability','booking-and-rental-manager-for-woocommerce')); ?>
                         </div>
                     </div>
 
-                    <?php include RBFW_TEMPLATE_PATH . 'forms/location-cards.php'; ?>
+                    <?php if ($rbfw_rent_type !== 'appointment') { include RBFW_TEMPLATE_PATH . 'forms/location-cards.php'; } ?>
 
                     <div class="rbfw-bikecarsd-result-wrap">
                         <div class="rbfw-bikecarsd-result-loader"></div>
@@ -424,6 +442,8 @@
                                     <ul class="rbfw-ul">
                                         <li class="duration-costing rbfw-cond">
                                             <?php esc_html_e('Duration Cost','booking-and-rental-manager-for-woocommerce'); ?>
+                                            <?php /* A <small>, not a <span>: rbfw_price_calculation_sd() rewrites every span in this row. */ ?>
+                                            <small class="rbfw_pricing_applied sessional" style="display:none">(<?php esc_html_e( 'Sessional pricing applied', 'booking-and-rental-manager-for-woocommerce' ); ?>)</small>
                                             <span>
                                                 <?php echo wp_kses(wc_price(0) , rbfw_allowed_html()); ?>
                                             </span>
@@ -534,6 +554,7 @@
                 <input type="hidden" name="rbfw_security_deposit_enable" id="rbfw_security_deposit_enable"  value="<?php echo esc_attr($rbfw_enable_security_deposit); ?>">
                 <input type="hidden" name="rbfw_security_deposit_type" id="rbfw_security_deposit_type"  value="<?php echo esc_attr($rbfw_security_deposit_type); ?>">
                 <input type="hidden" name="rbfw_security_deposit_amount" id="rbfw_security_deposit_amount"  value="<?php echo esc_attr($rbfw_security_deposit_amount); ?>">
+                <input type="hidden" id="rbfw_security_deposit_per_quantity" value="<?php echo esc_attr( get_post_meta( $rbfw_id, 'rbfw_security_deposit_per_quantity', true ) ); ?>">
 
                 <input type="hidden" name="manage_inventory_as_timely" id="manage_inventory_as_timely" value="<?php echo esc_attr($manage_inventory_as_timely); ?>">
                 <input type="hidden" name="rbfw_rent_type" id="rbfw_rent_type"  value="<?php echo esc_attr($rbfw_rent_type); ?>">

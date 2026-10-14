@@ -186,7 +186,9 @@ final class Announcements {
 	 *                                               was made or it failed.
 	 */
 	public function refresh() {
-		if ( ! $this->client->credentials()->has_credentials() ) {
+		// Journal §70 D1 (superseding §9.3b's "no consent gate" for free
+		// plugins): fetching announcements is a contact like any other.
+		if ( ! $this->client->credentials()->has_credentials() || ! $this->client->may_send() ) {
 			return null;
 		}
 
@@ -302,6 +304,9 @@ final class Announcements {
 				'type'       => isset( $announcement['type'] ) ? (string) $announcement['type'] : 'update',
 				'title'      => $title,
 				'body'       => isset( $announcement['body'] ) ? (string) $announcement['body'] : '',
+				// journal §95: formatting only. Kept as a string here and
+				// sanitized with wp_kses() at render, never trusted.
+				'body_html'  => isset( $announcement['body_html'] ) && is_string( $announcement['body_html'] ) ? $announcement['body_html'] : '',
 				'starts_at'  => isset( $announcement['starts_at'] ) ? (string) $announcement['starts_at'] : null,
 				'expires_at' => isset( $announcement['expires_at'] ) ? (string) $announcement['expires_at'] : null,
 				'_order'     => count( $normalized ),
