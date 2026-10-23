@@ -459,10 +459,6 @@ CSS for Single Page Template
     position: absolute;
     width: 100%;
     max-width: 420px;
-    /* A long list must scroll inside the popup, not run off the form/window. */
-    max-height: min(80vh, calc(100% - 24px));
-    overflow-y: auto;
-    overscroll-behavior: contain;
     border-radius: 14px;
     background-color: #fff;
     padding: 18px 18px 16px;
@@ -486,13 +482,10 @@ CSS for Single Page Template
     width: 100%;
     height: 100%;
 }
-/* Pinned to the popup's top-right while its content scrolls. */
 .close-price-container{
-    position: sticky;
-    top: 0;
-    float: right;
-    margin: -4px -4px 0 10px;
-    z-index: 3;
+    position: absolute;
+    right: 14px;
+    top: 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -9226,78 +9219,6 @@ select.rbfw-select.rbfw-time-price.pickup_time option:disabled {
 .single-rbfw_item .ui-datepicker-calendar .date-label{
     font-size: 8px;
 }
-
-/* "3 left" under a bookable day (setting: Show remaining stock on calendar) —
-   popup pickers and the inline Single Day calendar. */
-#ui-datepicker-div td .rbfw-day-stock,
-.ui-datepicker-inline td .rbfw-day-stock {
-    display: block;
-    margin-top: 2px;
-    font-size: 9px;
-    font-weight: 600;
-    line-height: 1.1;
-    color: #16a34a;
-    text-align: center;
-    white-space: nowrap;
-    pointer-events: none;
-}
-#ui-datepicker-div td .rbfw-day-stock--part,
-.ui-datepicker-inline td .rbfw-day-stock--part {
-    color: #b45309;
-}
-
-/* Label inside the date box (jQuery UI 1.13+): number on top, "3 left" under it,
-   the box keeps its size so bookable and disabled days stay on one line. */
-#ui-datepicker-div td.rbfw-day-stock-in a.ui-state-default,
-.ui-datepicker-inline td.rbfw-day-stock-in a.ui-state-default {
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-    gap: 1px;
-    line-height: 1 !important; /* The inline calendar sets 34px, which pushed the label out. */
-    vertical-align: middle;
-    overflow: visible;
-}
-#ui-datepicker-div td.rbfw-day-stock-in .rbfw-day-stock,
-.ui-datepicker-inline td.rbfw-day-stock-in .rbfw-day-stock {
-    margin-top: 0;
-    font-size: 8px;
-    line-height: 1;
-    letter-spacing: -.01em;
-}
-/* On hover and on the picked day the box turns the brand colour: follow its text colour. */
-#ui-datepicker-div td.rbfw-day-stock-in a.ui-state-default:hover .rbfw-day-stock,
-#ui-datepicker-div td.rbfw-day-stock-in a.ui-state-hover .rbfw-day-stock,
-#ui-datepicker-div td.rbfw-day-stock-in a.ui-state-active .rbfw-day-stock,
-.ui-datepicker-inline td.rbfw-day-stock-in a.ui-state-default:hover .rbfw-day-stock,
-.ui-datepicker-inline td.rbfw-day-stock-in a.ui-state-hover .rbfw-day-stock,
-.ui-datepicker-inline td.rbfw-day-stock-in a.ui-state-active .rbfw-day-stock {
-    color: inherit;
-    opacity: .9;
-}
-
-/* Part-booked day: no unit is free all day but some hours are. The taken half is
-   greyed on the diagonal (am = free in the morning, pm = free in the afternoon,
-   mid = free at both ends); the day stays clickable. Two IDs so the weekend tint
-   and the "background: none" resets (one ID + !important) never hide it; hover and
-   the selected day keep their own look. */
-#ui-datepicker-div#ui-datepicker-div td.rbfw-day-part a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover),
-#rbfw-bikecarsd-calendar#rbfw-bikecarsd-calendar td.rbfw-day-part a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover) {
-    border-color: #cbd5e1 !important;
-}
-#ui-datepicker-div#ui-datepicker-div td.rbfw-day-part-pm a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover),
-#rbfw-bikecarsd-calendar#rbfw-bikecarsd-calendar td.rbfw-day-part-pm a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover) {
-    background: linear-gradient(135deg, #e2e8f0 50%, #ffffff 50%) !important;
-}
-#ui-datepicker-div#ui-datepicker-div td.rbfw-day-part-am a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover),
-#rbfw-bikecarsd-calendar#rbfw-bikecarsd-calendar td.rbfw-day-part-am a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover) {
-    background: linear-gradient(135deg, #ffffff 50%, #e2e8f0 50%) !important;
-}
-#ui-datepicker-div#ui-datepicker-div td.rbfw-day-part-mid a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover),
-#rbfw-bikecarsd-calendar#rbfw-bikecarsd-calendar td.rbfw-day-part-mid a.ui-state-default:not(.ui-state-active):not(.ui-state-hover):not(:hover) {
-    background: linear-gradient(135deg, #ffffff 30%, #e2e8f0 30%, #e2e8f0 70%, #ffffff 70%) !important;
-}
-
 select#rbfw_variation_id_0,select#rbfw_variation_id_1,select#rbfw_variation_id_2 {
     border: 1px solid #dedede;
     background: #f5f5f5;
