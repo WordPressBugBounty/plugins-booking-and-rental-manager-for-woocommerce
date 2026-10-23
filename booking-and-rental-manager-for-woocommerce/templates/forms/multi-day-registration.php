@@ -345,6 +345,17 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? rbfw_s
                                 <?php endif; ?>
 
                                 <?php
+                                /**
+                                 * Lets pricing add-ons add their own section to the Pricing Details
+                                 * popup, after the add-on rate tables. Print a .rbfw-pi-section-label
+                                 * heading and a .rbfw_day_wise_price table to match this popup.
+                                 *
+                                 * @param int $post_id rbfw_item id.
+                                 */
+                                do_action( 'rbfw_md_pricing_info_sections', $post_id );
+                                ?>
+
+                                <?php
                                 // Extra service prices (optional add-on options).
                                 if ( ! empty( $extra_service_list ) && is_array( $extra_service_list ) ) :
                                     $rbfw_pi_has_service = false;
@@ -918,6 +929,7 @@ $rbfw_buffer_time = get_post_meta( $rbfw_id, 'rbfw_buffer_time', true ) ? rbfw_s
                 <input type="hidden" id="rbfw_maximum_booking_day" value="<?php echo esc_attr($rbfw_maximum_booking_day); ?>">
                 <input type="hidden" id="rbfw_datewise_minmax" value="<?php echo esc_attr( wp_json_encode( $rbfw_datewise_minmax ) ); ?>">
                 <input type="hidden" id="rbfw_month_wise_inventory" value="<?php echo esc_attr($day_wise_imventory); ?>">
+                <input type="hidden" id="rbfw_calendar_stock" value="<?php echo esc_attr( rbfw_show_calendar_remaining_stock( $rbfw_id ) ? 'yes' : 'no' ); ?>" data-post="<?php echo esc_attr( $rbfw_id ); ?>">
 
                 <input type="hidden" name="rbfw_particular_switch" id="rbfw_particular_switch"  value='<?php echo esc_attr($rbfw_particular_switch); ?>'>
                 <input type="hidden" name="rbfw_particulars_data" id="rbfw_particulars_data"  value='<?php echo esc_attr(wp_json_encode($particulars_data)); ?>'>

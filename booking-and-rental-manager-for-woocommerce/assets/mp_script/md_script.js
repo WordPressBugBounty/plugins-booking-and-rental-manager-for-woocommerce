@@ -209,6 +209,20 @@ jQuery(document).on('click', '.pricing-info-view', function (e) {
     jQuery(this).closest('.rbfw-pricing-info-heading').toggleClass('open');
     jQuery(this).closest('.mp_rbfw_ticket_form').toggleClass('overlay');
     jQuery('.price-item-container').stop(true, true).toggleClass('open').fadeToggle();
+    // Keep the whole popup inside the window. The booking sidebar is often
+    // sticky, so page scrolling cannot reveal a popup that sticks out.
+    var popup = jQuery(this).closest('.mp_rbfw_ticket_form').find('.price-item-container').get(0);
+    if (popup) {
+        setTimeout(function () {
+            popup.style.marginTop = '';
+            popup.scrollTop = 0;
+            if (!jQuery(popup).is(':visible')) { return; }
+            var gap = 12, r = popup.getBoundingClientRect(), shift = 0;
+            if (r.bottom > window.innerHeight - gap) { shift = (window.innerHeight - gap) - r.bottom; }
+            if (r.top + shift < gap) { shift = gap - r.top; }
+            if (shift) { popup.style.marginTop = Math.round(shift) + 'px'; }
+        }, 30);
+    }
 });
 jQuery(document).on('click', '.pricing-content-container .close-price-container', function (e) {
     e.preventDefault();
@@ -229,7 +243,7 @@ jQuery('body').on('focusin', '.pickup_date', function(e) {
         beforeShowDay: function(date)
         {
             // Use enhanced inventory checking that considers return date
-            return rbfw_enhanced_pickup_beforeShowDay(date);
+            return rbfwDayStockWrap(date, rbfw_enhanced_pickup_beforeShowDay(date));
         },
         onSelect: function (dateString, data) {
             let date_ymd = data.selectedYear + '-' + ('0' + (parseInt(data.selectedMonth) + 1)).slice(-2) + '-' + ('0' + parseInt(data.selectedDay)).slice(-2);
@@ -284,10 +298,17 @@ jQuery('body').on('focusin', '.pickup_date', function(e) {
             rbfw_refresh_calendar_with_inventory_check();
         },
 
-        onChangeMonthYear: function (year, month) {
-            if(rbfw_enable_time_slot=='no'){
-                loadDisabledDates(post_id, year, month);
+        // Time-slot items have no month inventory in the page, so fetch the shown
+        // month's fully booked days; the server only lists days with no free hour.
+        beforeShow: function () {
+            if (rbfw_enable_time_slot == 'yes') {
+                var shown = $picker.datepicker('getDate') || new Date();
+                loadDisabledDates(post_id, shown.getFullYear(), shown.getMonth() + 1);
             }
+        },
+
+        onChangeMonthYear: function (year, month) {
+            loadDisabledDates(post_id, year, month);
         }
     });
 
@@ -343,7 +364,7 @@ jQuery('body').on('change', 'input[name="rbfw_pickup_start_date"]', function(e) 
         beforeShowDay: function(date)
         {
             // Return calendar: pickup checks + block ranges spanning off days (rule 3)
-            return rbfw_enhanced_dropoff_beforeShowDay(date);
+            return rbfwDayStockWrap(date, rbfw_enhanced_dropoff_beforeShowDay(date));
         },
         onChangeMonthYear: function (year, month) {
             loadDisabledDates(post_id, year, month);
@@ -1769,12 +1790,21 @@ function rbfw_refresh_calendar_with_inventory_check() {
         return;
     }
 
-    window.requestAnimationFrame(function() {
-        jQuery('.pickup_date').datepicker('refresh');
-        jQuery('.dropoff_date').datepicker('refresh');
-        jQuery('.pickup_date_search').datepicker('refresh');
-        jQuery('.dropoff_date_search').datepicker('refresh');
-    });
+    window.requestAnimationFrame(rbfwMdRefreshShownCalendar);
+}
+
+/**
+ * Repaint only the date picker whose popup is open. jQuery UI draws every picker
+ * into one shared popup, so refreshing a closed picker painted its days (and its
+ * click handler) over the open one: the pick-up calendar then showed the return
+ * calendar's "Sold Out" days once a pick-up date was set. A closed picker re-runs
+ * beforeShowDay when it opens, so it needs no refresh.
+ */
+function rbfwMdRefreshShownCalendar() {
+    var dp = jQuery.datepicker;
+    if (dp && dp._datepickerShowing && dp._lastInput) {
+        jQuery(dp._lastInput).datepicker('refresh');
+    }
 }
 
 /**
@@ -1873,13 +1903,27 @@ function rbfwMdRangeSoldOut(from, to) {
     if (!rbfwMdBooked.loaded || rbfwMdBooked.stock <= 0) {
         return false;
     }
-    var booked = 0;
-    rbfwMdBooked.windows.forEach(function (w) {
-        if (w.start <= to && from <= w.end) {
-            booked += w.qty;
-        }
+    // Units out at the busiest moment of [from, to], not every booking touching it added
+    // up: three one-unit bookings on different days still leave a 3-unit item a unit for
+    // the whole stretch. The count can only rise where a booking starts, so the range
+    // start and those minutes cover it. Same rule as rbfw_overlap_peak_qty() on the server.
+    var live = rbfwMdBooked.windows.filter(function (w) {
+        return w.start <= to && from <= w.end;
     });
-    return booked >= rbfwMdBooked.stock;
+    var peak = 0;
+    [from].concat(live.map(function (w) { return w.start; })).forEach(function (t) {
+        if (t < from || t > to) {
+            return;
+        }
+        var booked = 0;
+        live.forEach(function (w) {
+            if (w.start <= t && t <= w.end) {
+                booked += w.qty;
+            }
+        });
+        peak = Math.max(peak, booked);
+    });
+    return peak >= rbfwMdBooked.stock;
 }
 
 function rbfwMdLoadBookedWindows(done) {
@@ -2507,10 +2551,11 @@ function loadDisabledDates(post_id, year, month) {
             disabledDates = Array.isArray(response) ? response : [];
 
             // Refresh datepicker
-            jQuery(".pickup_date").datepicker("refresh");
-            jQuery(".dropoff_date").datepicker("refresh");
+            rbfwMdRefreshShownCalendar();
         },
         error: function () {
+            jQuery('.ui-datepicker').removeClass('rbfw_loader_in');
+            jQuery('.ui-datepicker i.fa-spinner').remove();
             console.error("Failed to load disabled dates");
         }
     });
