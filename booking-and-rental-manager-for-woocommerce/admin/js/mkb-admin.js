@@ -35,6 +35,11 @@
      * Category 2 (.additional-service-item-price):
      *   bike_car_md, resort
      *
+     * Exception: a bike_car_md / resort item that still has rows in Category 1
+     * (rbfw_extra_service_data, set up before 2.7.2) shows both. Those rows are
+     * still offered on the booking form and priced in the cart, so hiding them
+     * left them bookable but impossible to see, edit or remove.
+     *
      * @param {string} itemType  Current rbfw_item_type value.
      * @param {jQuery} [$context] Optional DOM root (defaults to document).
      */
@@ -42,8 +47,9 @@
         var $root = ($context && $context.length) ? $context : jQuery(document);
         var $category1 = $root.find('.rbfw_es_price_config_wrapper');
         var $category2 = $root.find('.additional-service-item-price');
+        var hasLegacyRows = !!parseInt($category1.data('has-legacy-data'), 10);
 
-        // Always hide both first so they are never visible together.
+        // Hide both first, then show what this rent type uses.
         $category1.hide();
         $category2.hide();
 
@@ -54,6 +60,9 @@
             $category1.show();
         } else if (showCategory2.indexOf(itemType) !== -1) {
             $category2.show();
+            if (hasLegacyRows) {
+                $category1.show();
+            }
         }
     };
 
@@ -200,7 +209,7 @@
 
 
 
-        jQuery('.remove-row-size,.remove-rbfw_variations_table_row').on('click', function() {
+        jQuery('.remove-row-size').on('click', function() {
             if (confirm(rbfw_admin_i18n('confirm_remove_row', 'Are You Sure , Remove this row ? \n\n 1. Ok : To Remove . \n 2. Cancel : To Cancel .'))) {
                 jQuery(this).parents('tr').remove();
             } else {
@@ -208,15 +217,12 @@
             }
         });
 
-        jQuery('.remove-rbfw_variations_value_table_row').on('click', function(e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            if (confirm(rbfw_admin_i18n('confirm_remove_row', 'Are You Sure , Remove this row ? \n\n 1. Ok : To Remove . \n 2. Cancel : To Cancel .'))) {
-                jQuery(this).parents('tr.rbfw_variations_value_table_row').remove();
-            } else {
-                return false;
-            }
-        });
+        /* Item variation remove buttons are handled ONLY by the delegated handlers
+           near the end of this file. Variation values are <div> chips now, not
+           <tr> rows: a direct-bound handler here used to look for
+           tr.rbfw_variations_value_table_row, found nothing, and its
+           stopImmediatePropagation() kept the working handler from ever running,
+           so saved values could not be deleted. */
 
         jQuery('#add-row-dropoff').on('click', function() {
             var row = jQuery('#dropoff-hidden-row').clone(true);
@@ -2208,12 +2214,15 @@ jQuery(document).ready(function () {
         if (status == 'no') {
             jQuery(this).val('yes');
             jQuery('.rbfw_variations_table_wrap').slideDown().removeClass('hide').addClass('show');
-            jQuery('.item_stock_quantity input').attr("disabled", true);
-            jQuery('.item_stock_quantity').addClass('is-stock-disabled');
-            // Variations carry their own per-size stock now -- this shared number
-            // is disabled and must not block saving as "required".
-            $timelyInput.prop('required', false);
-            $timelySection.find('.rbfw-me-required-mark').hide();
+            // Multiple Day stock comes from the variations' own per-size table, so its
+            // Stock Quantity is disabled. Single Day's shared time-based stock is NOT:
+            // the booking engine still books against that pool (per-size stock only
+            // caps each value on top of it), so it stays editable and required.
+            jQuery('.item_stock_quantity input').not($timelyInput).attr("disabled", true);
+            jQuery('.item_stock_quantity').not($timelyInput.parent()).addClass('is-stock-disabled');
+            var timelyStillApplies = $timelySection.is(':visible');
+            $timelyInput.prop('required', timelyStillApplies);
+            $timelySection.find('.rbfw-me-required-mark').toggle(timelyStillApplies);
         }
     });
     jQuery('input[name=rbfw_enable_md_type_item_qty]').click(function () {

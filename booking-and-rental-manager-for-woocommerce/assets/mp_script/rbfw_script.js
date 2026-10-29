@@ -264,6 +264,131 @@ function rbfw_site_now(){
     return new Date(site.getUTCFullYear(), site.getUTCMonth(), site.getUTCDate(), site.getUTCHours(), site.getUTCMinutes(), site.getUTCSeconds());
 }
 
+/* ── Remaining units under each calendar day ("3 left") ───────────────────────
+ * Global setting "Show remaining stock on calendar". The form prints
+ * #rbfw_calendar_stock (value yes, data-post = item id) when it applies. Each month's
+ * figures come from rbfw_calendar_day_stock (rbfw_calendar_day_stock_map() on the
+ * server): { 'Y-m-d': { n: units left, p: '' | 'am' | 'pm' | 'mid' } }. A day with no
+ * unit free all day but free hours ('p') is drawn split: the taken half greyed, the
+ * day still clickable. Shared by every booking calendar (Multiple Day, Multiple Items,
+ * Resort, Single Day / Appointment); each wraps its beforeShowDay result with
+ * rbfwDayStockWrap().
+ */
+var rbfwDayStock = { map: {}, months: {}, timer: null };
+
+function rbfwDayStockOn() {
+    return jQuery('#rbfw_calendar_stock').val() === 'yes';
+}
+
+function rbfwDayStockKey(y, m, d) {
+    return y + '-' + ('0' + m).slice(-2) + (d ? '-' + ('0' + d).slice(-2) : '');
+}
+
+function rbfwDayStockLoad(year, month) {
+    var key = rbfwDayStockKey(year, month);
+    if (rbfwDayStock.months[key] || typeof rbfw_ajax_front === 'undefined') {
+        return;
+    }
+    rbfwDayStock.months[key] = true; // Once per month, even if it fails.
+    jQuery.ajax({
+        url: rbfw_ajax_front.rbfw_ajaxurl,
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            action: 'rbfw_calendar_day_stock',
+            post_id: jQuery('#rbfw_calendar_stock').data('post'),
+            year: year,
+            month: month,
+            nonce: rbfw_ajax_front.nonce_bikecarmd_ajax_price_calculation
+        }
+    }).done(function (res) {
+        if (res && res.success && res.data) {
+            jQuery.extend(rbfwDayStock.map, res.data);
+            rbfwDayStockRefresh();
+        }
+    });
+}
+
+// Repaint only calendars that are on screen: jQuery UI draws every popup picker into one
+// shared popup, so refreshing a closed one would paint its days over the open one.
+function rbfwDayStockRefresh() {
+    var dp = jQuery.datepicker;
+    if (dp && dp._datepickerShowing && dp._lastInput) {
+        jQuery(dp._lastInput).datepicker('refresh');
+    }
+    jQuery('div.hasDatepicker').datepicker('refresh'); // Inline calendars (Single Day).
+}
+
+/**
+ * Wrap a calendar's beforeShowDay result: tag bookable days that have a figure so
+ * rbfwDayStockPaint() can write it, and mark part-booked days. Whether a day can be
+ * picked is never changed here.
+ */
+function rbfwDayStockWrap(date, result) {
+    if (!Array.isArray(result) || !result[0] || !rbfwDayStockOn()) {
+        return result;
+    }
+    rbfwDayStockLoad(date.getFullYear(), date.getMonth() + 1);
+    var day = rbfwDayStock.map[rbfwDayStockKey(date.getFullYear(), date.getMonth() + 1, date.getDate())];
+    if (day && (day.n > 0 || day.p)) {
+        result = result.slice();
+        var cls = (result[1] || '') + ' rbfw-has-day-stock';
+        if (!(day.n > 0) && day.p) {
+            cls += ' rbfw-day-part rbfw-day-part-' + day.p;
+            if (!result[2] && typeof rbfw_translation !== 'undefined' && rbfw_translation.day_part_title) {
+                result[2] = rbfw_translation.day_part_title;
+            }
+        }
+        result[1] = cls.trim();
+    }
+    // Days are generated before the calendar is in the DOM; paint once it is.
+    if (!rbfwDayStock.timer) {
+        rbfwDayStock.timer = setTimeout(rbfwDayStockPaint, 0);
+    }
+    return result;
+}
+
+function rbfwDayStockPaint() {
+    rbfwDayStock.timer = null;
+    var t = (typeof rbfw_translation !== 'undefined') ? rbfw_translation : {};
+    var leftTpl = t.day_stock_left || '%d left';
+    var partTxt = t.day_part_free || 'Partial';
+    jQuery('.ui-datepicker-calendar td.rbfw-has-day-stock').each(function () {
+        var $td = jQuery(this);
+        if ($td.find('.rbfw-day-stock').length) {
+            return;
+        }
+        var link = $td.children('a').get(0);
+        // jQuery UI 1.13+ (WordPress ships 1.14) reads the picked day from data-date, so the
+        // label can sit inside the date box and every cell keeps one size. Older versions
+        // read the link's HTML; there it stays under the box.
+        var inside = !!(link && link.hasAttribute('data-date'));
+        var d = parseInt(inside ? link.getAttribute('data-date') : $td.children('a').text(), 10);
+        var m = parseInt($td.attr('data-month'), 10);
+        var y = $td.attr('data-year');
+        if (isNaN(d) || isNaN(m) || !y) {
+            return;
+        }
+        var day = rbfwDayStock.map[rbfwDayStockKey(y, m + 1, d)];
+        if (!day) {
+            return;
+        }
+        var text = day.n > 0 ? leftTpl.replace('%d', day.n) : (day.p ? partTxt : '');
+        if (!text) {
+            return;
+        }
+        var badge = document.createElement('span');
+        badge.className = 'rbfw-day-stock' + (day.n > 0 ? '' : ' rbfw-day-stock--part');
+        badge.textContent = text;
+        if (inside) {
+            $td.addClass('rbfw-day-stock-in');
+            link.appendChild(badge);
+        } else {
+            this.appendChild(badge);
+        }
+    });
+}
+
 function rbfw_off_day_dates(date,type='',today_enable='no',dropoff=null){
 
 
@@ -558,7 +683,10 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                     var slot_time = rbfwParseTimeParts(timeObj.time);
                     if (!slot_time) { return; }
 
-                    let current_date_time = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));// new Date();
+                    // Live site clock, not the render-time rbfw_js_variables.currentDateTime: a page
+                    // served from a page cache carries the clock of when it was cached, which left
+                    // started slots bookable (and the server then refused them at add-to-cart).
+                    let current_date_time = rbfw_site_now();
                     let actual_booking_date_time_format = new Date(current_date_time);
                     actual_booking_date_time_format.setHours(current_date_time.getHours() + rbfw_buffer_time);
 
@@ -636,7 +764,10 @@ function getAvailableTimes(schedule, givenDate,rdfw_available_time,pickup_time_p
                 var slot_time = rbfwParseTimeParts(timeObj.time);
                 if (!slot_time) { return; }
 
-                let current_date_time = new Date(rbfw_js_variables.currentDateTime.replace(" ", "T"));// new Date();
+                // Live site clock, not the render-time rbfw_js_variables.currentDateTime: a page
+                // served from a page cache carries the clock of when it was cached, which left
+                // started slots bookable (and the server then refused them at add-to-cart).
+                let current_date_time = rbfw_site_now();
                 let actual_booking_date_time_format = new Date(current_date_time);
                 actual_booking_date_time_format.setHours(current_date_time.getHours() + rbfw_buffer_time);
 
@@ -1284,17 +1415,37 @@ jQuery(function ($) {
         return isNaN(n) ? Infinity : n;
     }
 
-    // null = this item has no standalone Quantity control: steppers own the
-    // quantity, unchanged legacy behavior. A number = a Quantity control exists —
-    // either a standalone selector (an admin-enabled standalone Quantity dropdown,
-    // or the SD timely Quantity select, which always renders once a duration is
-    // chosen) or, for the SD rate-table step (single_day_info.php — one qty
-    // stepper per rental-length row, no single selector), the SUM of those rows —
-    // it is now the gate: the steppers may not collectively exceed it, and sit
-    // locked until it is picked and > 0.
+    // Per item (rbfw_variation_qty_mode(), printed as data-qty-mode on the
+    // variations wrapper): 'variations' = the customer picks variation values and
+    // the quantity is their total, the Quantity selector just follows (how
+    // variations always worked, the default); 'quantity' = the customer chooses
+    // a Quantity first and the steppers only distribute it.
+    function rbfwVariationQtyMode($form) {
+        var $scope = ($form && $form.length) ? $form : $(document);
+        var mode = $scope.find('.rbfw-variations-content-wrapper[data-qty-mode]').first().attr('data-qty-mode');
+        return mode === 'quantity' ? 'quantity' : 'variations';
+    }
+
+    // 'variations' mode: the most units the steppers may add up to, set on the
+    // Quantity selector by the booking script (Single Day: the chosen duration's
+    // free units). null = no such limit; each value's own stock still applies.
+    function rbfwVariationQtyLimit($form) {
+        var n = parseInt($form.find('#rbfw_item_quantity, #rbfw_item_quantity_md').first().attr('data-rbfw-limit'), 10);
+        return isNaN(n) ? null : n;
+    }
+
+    // null = the steppers own the quantity: the item has no standalone Quantity
+    // control, or it has one but is a 'variations' mode item. A number = a
+    // Quantity control gates the steppers — either a standalone selector on a
+    // 'quantity' mode item (an admin-enabled standalone Quantity dropdown, or the
+    // SD timely Quantity select, which always renders once a duration is chosen)
+    // or, for the SD rate-table step (single_day_info.php — one qty stepper per
+    // rental-length row, no single selector), the SUM of those rows: the steppers
+    // may not collectively exceed it, and sit locked until it is picked and > 0.
     function rbfwVariationGroupCap($form) {
         var $qty = $form.find('#rbfw_item_quantity, #rbfw_item_quantity_md').first();
         if ($qty.length) {
+            if (rbfwVariationQtyMode($form) !== 'quantity') return null;
             var v = parseInt($qty.val(), 10);
             return isNaN(v) ? 0 : v;
         }
@@ -1365,11 +1516,14 @@ jQuery(function ($) {
 
         var groups = rbfwVariationGroups($form);
         var leaderSum = rbfwVariationLeaderSum($form, cap, groups);
+        var limit = cap === null ? rbfwVariationQtyLimit($form) : null;
 
         groups.forEach(function ($groupInputs, groupIndex) {
             // The leader group itself is never capped by its own sum — only a
             // real standalone Quantity control, or a later group, is capped.
-            var groupCap = cap !== null ? cap : (groupIndex > 0 ? leaderSum : null);
+            // When the steppers own the quantity, the leader still stays within
+            // the units the form says are free (null = no limit).
+            var groupCap = cap !== null ? cap : (groupIndex > 0 ? leaderSum : limit);
 
             var used = rbfwVariationGroupSum($groupInputs);
 
@@ -1456,8 +1610,10 @@ jQuery(function ($) {
             // name="rbfw_item_quantity">` with NO id at all
             // (templates/forms/multi-day-registration.php) — an id-only selector
             // silently misses it, leaving the submitted quantity stuck at its
-            // hardcoded "1" no matter what the steppers show.
-            var qtyToSet = isSdTimely ? 1 : totalQty;
+            // hardcoded "1" no matter what the steppers show. Every mode submits
+            // the summed units (the 1616e521 merge had brought back the 2.7.4
+            // "isSdTimely ? 1" pin that a96ed84b removed).
+            var qtyToSet = totalQty;
             var $qty = $form.find('#rbfw_item_quantity, #rbfw_item_quantity_md, input[name="rbfw_item_quantity"]').first();
             if ($qty.length) {
                 if ($qty.is('select') && !$qty.find('option[value="' + qtyToSet + '"]').length) {
@@ -1465,6 +1621,11 @@ jQuery(function ($) {
                 }
                 $qty.val(String(qtyToSet));
             }
+            // A 'variations' mode item that has a Quantity selector: the steppers
+            // ARE the quantity, so the selector row would only show a second
+            // number that can disagree with them. It stays in the form (hidden)
+            // to carry the summed quantity.
+            $form.find('.timely_quqntity_table, .rbfw_quantity_md').hide();
         }
         // else: a standalone Quantity selector exists and is now the gate — its
         // own value is the quantity the customer chose, and the steppers only
@@ -1544,7 +1705,9 @@ jQuery(function ($) {
             var groups = rbfwVariationGroups($form);
             var leaderSum = rbfwVariationLeaderSum($form, cap, groups);
             var groupIndex = $group.length ? $form.find('.rbfw-variation-group').index($group) : -1;
-            if (leaderSum !== null && groupIndex > 0) groupCap = leaderSum;
+            // A later group follows the leader; the leader (or a single group)
+            // stays within the form's free units, if it states any.
+            groupCap = (leaderSum !== null && groupIndex > 0) ? leaderSum : rbfwVariationQtyLimit($form);
         }
         if (groupCap !== null) {
             var used = rbfwVariationGroupSum($groupInputs);
@@ -1627,5 +1790,6 @@ jQuery(function ($) {
 
     // Exposed so a date-change success handler can force a resync/recalc explicitly.
     window.rbfwVariationRecalc = rbfwVariationRecalc;
+    window.rbfwVariationQtyMode = rbfwVariationQtyMode;
     window.rbfwSyncStepperButtons = rbfwSyncStepperScope;
 })();
