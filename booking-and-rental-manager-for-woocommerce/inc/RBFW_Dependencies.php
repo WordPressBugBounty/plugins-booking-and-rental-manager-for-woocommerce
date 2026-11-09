@@ -201,6 +201,11 @@ if (! class_exists('RBFW_Dependencies')) {
                 'pickup_time' => __('Pickup Time', 'booking-and-rental-manager-for-woocommerce'),
                 'past_time' => __('Past Time', 'booking-and-rental-manager-for-woocommerce'),
                 'not_available' => __('Not available', 'booking-and-rental-manager-for-woocommerce'),
+                // Time slot calendar headings (rbfw_script.js getAvailableTimes()).
+                'select_time' => __('Select Time', 'booking-and-rental-manager-for-woocommerce'),
+                'time_group_morning' => _x('Morning', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
+                'time_group_afternoon' => _x('Afternoon', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
+                'time_group_evening' => _x('Evening', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
                 'variation_price_options' => $rbfw_variation_price_options,
                 'any_duration' => __('Any duration', 'booking-and-rental-manager-for-woocommerce'),
                 'available_quantity_is' => __('Available Quantity is', 'booking-and-rental-manager-for-woocommerce'),
@@ -244,6 +249,13 @@ if (! class_exists('RBFW_Dependencies')) {
 			wp_enqueue_style('select2.min', plugin_dir_url(__DIR__) . 'admin/css/select2.min.css');
 			wp_enqueue_style('rbfw-admin-style', plugin_dir_url(__DIR__) . 'admin/css/admin_style.css', array(), time());
 			wp_enqueue_style('rbfw-admin', plugin_dir_url(__DIR__) . 'assets/admin/css/admin.css', array(), time());
+			// Classic item editor only: the redesigned Pricing / Extra Service / Inventory / Fee
+			// Management sections are styled for the modern editor in rbfw-modern-editor.css;
+			// this carries those styles over to the classic meta box (see the file header).
+			$rbfw_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+			if ( $rbfw_screen && 'post' === $rbfw_screen->base && 'rbfw_item' === $rbfw_screen->post_type ) {
+				wp_enqueue_style( 'rbfw-classic-editor', plugin_dir_url( __DIR__ ) . 'admin/css/rbfw-classic-editor.css', array( 'rbfw-admin-style', 'rbfw-admin' ), filemtime( RBFW_PLUGIN_DIR . '/admin/css/rbfw-classic-editor.css' ) );
+			}
 			wp_enqueue_style('rbfw-placeholder-loading', plugin_dir_url(__DIR__) . 'css/placeholder-loading.css');
 			wp_enqueue_style('smart_wizard_all', plugin_dir_url(__DIR__) . 'admin/css/smart_wizard_all.min.css');
 			// wp_enqueue_style('rbfw-style', plugin_dir_url(__DIR__) . 'css/rbfw_style.css', array());
@@ -424,6 +436,11 @@ if (! class_exists('RBFW_Dependencies')) {
 				'pickup_time' => __('Pickup Time', 'booking-and-rental-manager-for-woocommerce'),
 				'past_time' => __('Past Time', 'booking-and-rental-manager-for-woocommerce'),
 				'not_available' => __('Not available', 'booking-and-rental-manager-for-woocommerce'),
+				// Time slot calendar headings (rbfw_script.js getAvailableTimes()).
+				'select_time' => __('Select Time', 'booking-and-rental-manager-for-woocommerce'),
+				'time_group_morning' => _x('Morning', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
+				'time_group_afternoon' => _x('Afternoon', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
+				'time_group_evening' => _x('Evening', 'time slot group heading', 'booking-and-rental-manager-for-woocommerce'),
 				'sold_out' => __('Sold Out', 'booking-and-rental-manager-for-woocommerce'),
 				/* translators: %d: number of units still available on that date */
 				'day_stock_left' => __('%d left', 'booking-and-rental-manager-for-woocommerce'),
