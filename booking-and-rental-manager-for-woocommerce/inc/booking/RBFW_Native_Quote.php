@@ -137,6 +137,13 @@ if ( ! class_exists( 'RBFW_Native_Quote' ) ) {
 			}
 			$start_datetime = isset( $cart_data['rbfw_start_datetime'] ) ? $cart_data['rbfw_start_datetime'] : '';
 			$end_datetime   = isset( $cart_data['rbfw_end_datetime'] ) ? $cart_data['rbfw_end_datetime'] : '';
+			if ( $start_datetime && $end_datetime ) {
+				$ts_start = strtotime( $start_datetime );
+				$ts_end   = strtotime( $end_datetime );
+				if ( false !== $ts_start && false !== $ts_end && $ts_start > $ts_end ) {
+					return new WP_Error( 'rbfw_invalid_dates', esc_html__( 'Return date/time cannot be earlier than pickup date/time.', 'booking-and-rental-manager-for-woocommerce' ) );
+				}
+			}
 			if ( function_exists( 'rbfw_global_off_dates_overlap' )
 				&& $start_datetime
 				&& rbfw_global_off_dates_overlap( $start_datetime, $end_datetime ) ) {
@@ -250,6 +257,18 @@ if ( ! class_exists( 'RBFW_Native_Quote' ) ) {
 			if ( '' === trim( $start_date ) || '' === trim( $end_date ) || false === strtotime( $start_date ) || false === strtotime( $end_date ) ) {
 				return false;
 			}
+			if ( strtotime( $start_date ) > strtotime( $end_date ) ) {
+				return false;
+			}
+			$start_dt = isset( $cart_data['rbfw_start_datetime'] ) ? (string) $cart_data['rbfw_start_datetime'] : '';
+			$end_dt   = isset( $cart_data['rbfw_end_datetime'] ) ? (string) $cart_data['rbfw_end_datetime'] : '';
+			if ( '' !== trim( $start_dt ) && '' !== trim( $end_dt ) ) {
+				$ts_start = strtotime( $start_dt );
+				$ts_end   = strtotime( $end_dt );
+				if ( false !== $ts_start && false !== $ts_end && $ts_start > $ts_end ) {
+					return false;
+				}
+			}
 
 			if ( in_array( $item_type, array( 'bike_car_sd', 'appointment' ), true ) ) {
 				return self::has_positive_quantity( isset( $cart_data['rbfw_type_info'] ) ? $cart_data['rbfw_type_info'] : array() );
@@ -306,6 +325,35 @@ if ( ! class_exists( 'RBFW_Native_Quote' ) ) {
 			}
 
 			return absint( $posted );
+		}
+
+		/**
+		 * The stock-relevant part of a server-built quote, for a booking's inventory entry.
+		 *
+		 * The same keys a WooCommerce order records (chosen options / rooms, variations,
+		 * services, pickup location), so a Custom Payment booking holds the same stock.
+		 * Multiple Items lines are not included: the checkout rebuilds them itself.
+		 *
+		 * @param array $cart_data The `cart_data` of a build() result.
+		 * @return array
+		 */
+		public static function booking_inventory_info( $cart_data ) {
+			$info = array();
+			if ( ! is_array( $cart_data ) ) {
+				return $info;
+			}
+			foreach ( array( 'rbfw_type_info', 'rbfw_variation_info', 'rbfw_service_info', 'rbfw_service_infos', 'rbfw_category_wise_info' ) as $key ) {
+				if ( isset( $cart_data[ $key ] ) && is_array( $cart_data[ $key ] ) ) {
+					$info[ $key ] = $cart_data[ $key ];
+				}
+			}
+			foreach ( array( 'rbfw_pickup_point', 'rbfw_dropoff_point' ) as $key ) {
+				if ( isset( $cart_data[ $key ] ) && is_scalar( $cart_data[ $key ] ) ) {
+					$info[ $key ] = (string) $cart_data[ $key ];
+				}
+			}
+
+			return $info;
 		}
 
 		/**

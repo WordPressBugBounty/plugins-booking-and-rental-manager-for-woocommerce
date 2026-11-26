@@ -875,6 +875,11 @@ function rbfw_calendar_entry_holds( $booking_id, $entry ) {
  * @return int[] [ min, max ]
  */
 function rbfw_calendar_booked_extremes( $windows, $from, $to ) {
+    if ( $from > $to ) {
+        $tmp  = $from;
+        $from = $to;
+        $to   = $tmp;
+    }
     $rise = array( $from );
     $fall = array( $from );
     $live = array();
@@ -4073,36 +4078,69 @@ function rbfw_variation_qty_mode( $post_id ) {
 }
 
 /**
- * Total units chosen across an item's variation values.
+ * Units chosen in each of an item's variation groups.
  *
- * Only values that exist in the item's own variation set are counted, so a
- * posted key that is not configured cannot inflate the unit count.
+ * Every group (Size, Colour, ...) re-describes the SAME units, so the groups are
+ * never added together: two dresses are "Red x2" for Colour AND "Small x2" for
+ * Size. Only groups with at least one named value are returned, and only values
+ * that exist in the item's own variation set are counted.
+ *
+ * @param int   $post_id rbfw_item id.
+ * @param mixed $posted  Posted rbfw_variation_qty[ field_id ][ value_name ] => qty.
+ * @return array<string,int> field_id => units chosen in that group.
+ */
+function rbfw_variation_group_totals( $post_id, $posted ) {
+	$variation_data = get_post_meta( $post_id, 'rbfw_variations_data', true );
+	if ( ! is_array( $variation_data ) ) {
+		return array();
+	}
+	$posted = is_array( $posted ) ? $posted : array();
+
+	$totals = array();
+	foreach ( $variation_data as $field ) {
+		if ( ! is_array( $field ) || empty( $field['field_id'] ) || empty( $field['value'] ) || ! is_array( $field['value'] ) ) {
+			continue;
+		}
+		$qty_map = ( isset( $posted[ $field['field_id'] ] ) && is_array( $posted[ $field['field_id'] ] ) ) ? $posted[ $field['field_id'] ] : array();
+		$named   = false;
+		$units   = 0;
+		foreach ( $field['value'] as $value ) {
+			$name = ( is_array( $value ) && isset( $value['name'] ) ) ? (string) $value['name'] : '';
+			if ( '' === $name ) {
+				continue;
+			}
+			$named = true;
+			if ( isset( $qty_map[ $name ] ) ) {
+				$units += max( 0, (int) $qty_map[ $name ] );
+			}
+		}
+		if ( $named ) {
+			$totals[ (string) $field['field_id'] ] = $units;
+		}
+	}
+
+	return $totals;
+}
+
+/**
+ * Units chosen through an item's variation values.
+ *
+ * The first variation group's total, as the booking form counts it: groups are
+ * not added together (see rbfw_variation_group_totals()). Only values that exist
+ * in the item's own variation set are counted, so a posted key that is not
+ * configured cannot inflate the unit count.
  *
  * @param int   $post_id rbfw_item id.
  * @param mixed $posted  Posted rbfw_variation_qty[ field_id ][ value_name ] => qty.
  * @return int
  */
 function rbfw_variation_units( $post_id, $posted ) {
-	$variation_data = get_post_meta( $post_id, 'rbfw_variations_data', true );
-	if ( ! is_array( $posted ) || ! is_array( $variation_data ) ) {
+	if ( ! is_array( $posted ) ) {
 		return 0;
 	}
+	$totals = rbfw_variation_group_totals( $post_id, $posted );
 
-	$units = 0;
-	foreach ( $variation_data as $field ) {
-		if ( ! is_array( $field ) || empty( $field['field_id'] ) || empty( $field['value'] ) || ! is_array( $field['value'] ) ) {
-			continue;
-		}
-		$qty_map = ( isset( $posted[ $field['field_id'] ] ) && is_array( $posted[ $field['field_id'] ] ) ) ? $posted[ $field['field_id'] ] : array();
-		foreach ( $field['value'] as $value ) {
-			$name = isset( $value['name'] ) ? $value['name'] : '';
-			if ( '' !== $name && isset( $qty_map[ $name ] ) ) {
-				$units += max( 0, (int) $qty_map[ $name ] );
-			}
-		}
-	}
-
-	return $units;
+	return $totals ? (int) reset( $totals ) : 0;
 }
 
 /**
@@ -4210,6 +4248,12 @@ function rbfw_count_overlapping_booked_qty( $post_id, $req_start_datetime, $req_
 		$req_end   = new DateTime( $req_end_datetime );
 	} catch ( Exception $e ) {
 		return 0;
+	}
+
+	if ( $req_start > $req_end ) {
+		$tmp       = $req_start;
+		$req_start = $req_end;
+		$req_end   = $tmp;
 	}
 
 	$total_booked = 0;
@@ -4344,6 +4388,12 @@ function rbfw_count_overlapping_cart_qty( $sibling_lines, $req_start_datetime, $
 		$req_end   = new DateTime( $req_end_datetime );
 	} catch ( Exception $e ) {
 		return 0;
+	}
+
+	if ( $req_start > $req_end ) {
+		$tmp       = $req_start;
+		$req_start = $req_end;
+		$req_end   = $tmp;
 	}
 
 	$used = 0;
@@ -4695,6 +4745,40 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 		return $checks; // can't evaluate -> fail open
 	}
 
+	$ts_start = strtotime( $start_dt );
+	$ts_end   = strtotime( $end_dt );
+	if ( false === $ts_start || false === $ts_end || $ts_start > $ts_end ) {
+		$checks[] = array(
+			'ok'        => false,
+			'requested' => 1,
+			'available' => 0,
+			'label'     => get_the_title( $rbfw_id ),
+			'message'   => __( 'Return date/time cannot be earlier than pickup date/time.', 'booking-and-rental-manager-for-woocommerce' ),
+		);
+		return $checks;
+	}
+	$s_date = ! empty( $values['rbfw_start_date'] ) ? $values['rbfw_start_date'] : '';
+	$e_date = ! empty( $values['rbfw_end_date'] ) ? $values['rbfw_end_date'] : '';
+	if ( ! empty( $s_date ) && ! empty( $e_date ) ) {
+		$ts_sdate = strtotime( $s_date );
+		$ts_edate = strtotime( $e_date );
+		if ( false === $ts_sdate || false === $ts_edate || $ts_sdate > $ts_edate ) {
+			$checks[] = array(
+				'ok'        => false,
+				'requested' => 1,
+				'available' => 0,
+				'label'     => get_the_title( $rbfw_id ),
+				'message'   => __( 'Return date/time cannot be earlier than pickup date/time.', 'booking-and-rental-manager-for-woocommerce' ),
+			);
+			return $checks;
+		}
+	}
+
+	$exclude_order_id = ! empty( $values['exclude_order_id'] ) ? (int) $values['exclude_order_id'] : ( ! empty( $values['rbfw_order_id'] ) ? (int) $values['rbfw_order_id'] : 0 );
+	if ( $exclude_order_id ) {
+		$shared_args['exclude_order_id'] = $exclude_order_id;
+	}
+
 	$item_name = get_the_title( $rbfw_id );
 	if ( function_exists( 'rbfw_global_off_dates_overlap' ) && rbfw_global_off_dates_overlap( $start_dt, $end_dt ) ) {
 		$checks[] = array(
@@ -4703,6 +4787,20 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 			'available' => 0,
 			'label'     => $item_name,
 			'message'   => __( 'The selected dates include a global off date. Please choose different dates.', 'booking-and-rental-manager-for-woocommerce' ),
+		);
+
+		return $checks;
+	}
+
+	// The item's own Off Days (and Appointment days): enforced here, not only in the calendar.
+	$off_day_error = function_exists( 'rbfw_booking_off_day_error' ) ? rbfw_booking_off_day_error( $rbfw_id, $values ) : '';
+	if ( '' !== $off_day_error ) {
+		$checks[] = array(
+			'ok'        => false,
+			'requested' => 1,
+			'available' => 0,
+			'label'     => $item_name,
+			'message'   => $off_day_error,
 		);
 
 		return $checks;
@@ -4717,7 +4815,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 		$requested  = isset( $values['rbfw_item_quantity'] ) ? max( 1, (int) $values['rbfw_item_quantity'] ) : 1;
 
 		if ( '' !== $start_date && '' !== $end_date && '' !== $end_time ) {
-			$remaining = (int) rbfw_timely_available_quantity_updated( $rbfw_id, $start_date, $start_time, $end_date, $end_time );
+			$remaining = (int) rbfw_timely_available_quantity_updated( $rbfw_id, $start_date, $start_time, $end_date, $end_time, $exclude_order_id );
 			try {
 				$req_start = new DateTime( $start_date . ' ' . $start_time );
 				$req_end   = new DateTime( $end_date . ' ' . $end_time );
@@ -4794,7 +4892,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 			if ( $req_qty < 1 || ! isset( $stock_map[ $room_type ] ) ) {
 				continue;
 			}
-			$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt, array( 'type_key' => $room_type ) );
+			$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt, array( 'type_key' => $room_type, 'exclude_order_id' => $exclude_order_id ) );
 			$used      = rbfw_count_overlapping_cart_qty( $sibling_lines, $start_dt, $end_dt, array( 'type_key' => $room_type ) );
 			$available = $stock_map[ $room_type ] - $booked - $used;
 			$checks[]  = array(
@@ -4839,7 +4937,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 				if ( null === $stock ) {
 					continue; // unknown -> fail open
 				}
-				$booked    = rbfw_count_overlapping_multi_item_qty( $rbfw_id, $start_dt, $end_dt, $li['item_name'] );
+				$booked    = rbfw_count_overlapping_multi_item_qty( $rbfw_id, $start_dt, $end_dt, $li['item_name'], $exclude_order_id );
 				$available = $stock - $booked;
 			}
 
@@ -4992,7 +5090,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 			if ( null === $stock ) {
 				continue; // unknown variation stock -> fail open for this value
 			}
-			$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt, array( 'variation_value' => $vv ) );
+			$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt, array( 'variation_value' => $vv, 'exclude_order_id' => $exclude_order_id ) );
 			$used      = rbfw_count_overlapping_cart_qty( $sibling_lines, $start_dt, $end_dt, array( 'variation_value' => $vv ) );
 			$available = $stock - $booked - $used;
 			$checks[]  = array(
@@ -5007,7 +5105,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
 
 	// Plain single-unit stock (blank treated as 1).
 	$stock     = rbfw_get_effective_item_stock( $rbfw_id );
-	$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt );
+	$booked    = rbfw_count_overlapping_booked_qty( $rbfw_id, $start_dt, $end_dt, array( 'exclude_order_id' => $exclude_order_id ) );
 	$used      = rbfw_count_overlapping_cart_qty( $sibling_lines, $start_dt, $end_dt );
 	/* Packages sharing this item's stock: $booked already covers their orders,
 	   so only their still-pending cart lines are added. */
@@ -5039,7 +5137,7 @@ function rbfw_check_rental_availability( $rbfw_id, $values, $sibling_lines = arr
  * @param string $item_name Sub-item name.
  * @return int
  */
-function rbfw_count_overlapping_multi_item_qty( $post_id, $start_dt, $end_dt, $item_name ) {
+function rbfw_count_overlapping_multi_item_qty( $post_id, $start_dt, $end_dt, $item_name, $exclude_order_id = 0 ) {
 	$inventory = get_post_meta( $post_id, 'rbfw_inventory', true );
 	if ( empty( $inventory ) || ! is_array( $inventory ) ) {
 		return 0;
@@ -5053,9 +5151,18 @@ function rbfw_count_overlapping_multi_item_qty( $post_id, $start_dt, $end_dt, $i
 		return 0;
 	}
 
+	if ( $req_start > $req_end ) {
+		$tmp       = $req_start;
+		$req_start = $req_end;
+		$req_end   = $tmp;
+	}
+
 	$booked = 0;
-	foreach ( $inventory as $entry ) {
+	foreach ( $inventory as $order_id => $entry ) {
 		if ( ! is_array( $entry ) ) {
+			continue;
+		}
+		if ( $exclude_order_id && (int) $order_id === (int) $exclude_order_id ) {
 			continue;
 		}
 		$status = isset( $entry['rbfw_order_status'] ) ? $entry['rbfw_order_status'] : '';
